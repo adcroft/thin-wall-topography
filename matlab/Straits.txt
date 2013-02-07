@@ -1,0 +1,12 @@
+%X	Y	Angle (anti-clockwise)	Label
+102	2	-40	Strait of Malacca
+105.8	-6	40	Sunda Strait
+%104	1.2	10	Singapore Strait
+118.5	-3.0	-80	Makassar Strait
+127	-1.7	-35	Lifamatola
+115.9	-8.4	55	Lombok
+126	-8.4	15	Ombai
+123	-11.3	25	Timor
+122.1	19.7	0	Balintang Channel
+-26	66	35	Denmark Strait
+-7	60	-25	Faroe Bank channel

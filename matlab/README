@@ -1,0 +1,58 @@
+Prerequisites
+=============
+You will need some input data sets in a netcdf format. Some examples are
+http://www.ngdc.noaa.gov/mgg/global/global.html
+http://www.ngdc.noaa.gov/mgg/global/etopo2.html
+http://iridl.ldeo.columbia.edu/SOURCES/.Sandwell/.seafloor/data.cdf
+https://www.bodc.ac.uk/data/online_delivery/gebco/ (requires registration)
+You will need to modify the appropriate read_*.m scripts to point to the files you download.
+I've used the mexnc, snctools and nc toolbox in these scripts. You will need them to read the netcdf data, or otherwise you will need to rewrite the read_* scripts.
+
+Quick start
+===========
+>> makeGeoPlots('indo2')
+>> makeSillCalcs('denmark')
+
+Top level driver scripts
+========================
+makeGeoPlots.m	- runs algorithm and plots figures for named regions
+makeSillCalcs.m	- runs sill depth analysis for named regions
+
+The main routines
+=================
+thinwallGenerator.m	- wrapper for xyrecur_fv6 (will read hires data if not provided in arguments)
+xyrecur_fv6.m	- the main thinwall interpolation algorithm
+check_hxhy.m	- check that edge data and cell-centered data are consistent
+finegrid.m	- interpolates data to from coarse to fine
+generate_finegrid.m	- finds a fine grid by repeated division
+gen_hxhy.m	- generates edge data consistent with partial steps
+sill_depth.m	- calculate sill depth for a given thinwall data
+
+Graphical tools
+===============
+pcol.m	- replacement for pcolor
+plotraster.m	- draws thinwall data
+cm_landwater.m	- land/sea colorbar
+drawColorbar.m	- for drawing a stand alone colorbar
+labelStraits.m	- draw text labels of Straits on geographic figures
+
+Scripts for reading hires topographic data
+==========================================
+(These need customizing for your data and location)
+read_etopo1.m
+read_etopo2.m
+read_etopo5.m
+read_gebco_08.m
+read_sandwell_image.m
+read_sandwell.m
+
+History
+=======
+These tools are the latest rendition of tools/scripts that have been in use with the MITgcm (http://mitgcm.org) since around 2001, and under development from 1998 (as far as is documented, but probably earlier). The original codes were developed by Alistair Adcroft with input from Chris Hill. Arne Biastoch took over maintenance during the ECCO project. These early versions are still available from:
+ http://mitgcm.org/viewvc/MITgcm/old_develop/preprocess/
+ http://www.ecco.ucsd.edu/mitgcmuv/mit_data.html
+The new version provided here shares the overall structure (apparent in some filenames) but the core of the interpolation algorithm has been redesigned five times since the mid-2000's (hence the filename xyrecur_fv6.m in this version). While the early versions required editing the topography (and provided the tools to do so) the objective of the new algorithms was to use a concept of deepest connectivity to restrict the interpolation process. It never quite worked for versions 2, 3 and 4, with occasional Straits or headlands disappearing. It was only around version 5 that the coarse resolution results seemed to be objectively consistent with the high-resolution input data. And it was only in attempting to write a paper describing the approach that version 6 came into existence to simplify and consolidate the steps into an algorithm that could be described (as opposed to a code that used if-then-else-but constructs).
+
+References
+==========
+Adcroft, A., 2013: Representation of topography by porous barriers and objective interpolation of topographic data. Ocean Modelling, submitted.
