@@ -8,7 +8,7 @@ The purpose of this repository is to promote and facilitate the use of this, or 
 How to cite
 ===========
 This algoritm is due to be published in a scientific journal, Ocean Modelling (Elsevier), http://www.journals.elsevier.com/ocean-modelling/ . If you are publishing data or research that uses this software or algorithm, you should cite the original algorithm as follows:
- Adcroft, A., 2014: Representation of topography by porous barriers and objective interpolation of topographic data. Ocean Modelling, submitted.
+ Adcroft, A., 2013: Representation of topography by porous barriers and objective interpolation of topographic data. Ocean Modelling, submitted.
 
 What's what
 ===========
@@ -20,7 +20,3 @@ The python and fortran source codes are in the pipeline.
 License
 =======
 Distributed under the Gnu General Public License, version 3. See LICENSE.txt for details or http://www.gnu.org/licenses/gpl.html.
-
-References
-==========
-Adcroft, A., 2013: Representation of topography by porous barriers and objective interpolation of topographic data. Ocean Modelling, submitted.
