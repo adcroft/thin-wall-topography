@@ -3,7 +3,7 @@ thin-wall-topography
 
 Implementation of the thin-wall interpolation algorithm for interpolating high-resolution topography for use in numerical circulation models of the ocean and atmosphere.
 
-The purpose of this repository is to promote and facilitate the use of this, or other interpolation methods, for objectively generating topographic files used by numerical circulation codes. I also hope this will become a catalyst for further development of the algorithm. Contributions are welcome. Consistent with the GPLv3 (see below) you can use this software, copy it, distribute it, etc. but all such versions must be also be provided under the GPLv3 (I'm no lawyer but I basically want you to be able to use, and help improve, this software).
+The purpose of this repository is to promote and facilitate the use of this, or other interpolation methods, for objectively generating topographic files used by numerical circulation codes. I also  hope this will become a catalyst for further development of the algorithm. Contributions are welcome. Consistent with the GPLv3 (see below) you can use this software, copy it, distribute it, etc. but all such versions must be also be provided under the GPLv3 (I'm no lawyer but I basically want you to be able to use, and help improve, this software).
 
 How to cite
 ===========
