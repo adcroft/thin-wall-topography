@@ -30,7 +30,6 @@ def refine_loop(trg_lon_grid,trg_lat_grid, src_lon_grid,src_lat_grid, max_stages
         
     return GMesh_list, hits 
 
-
 class GMesh:
     """Describes 2D meshes for ESMs.
     
@@ -50,7 +49,7 @@ class GMesh:
     area  - area of cells, shape (nj,ni)
     """
 
-    def __init__(self, shape=None, x=None, y=None, area=None, x0=-180.):
+    def __init__(self, shape=None, x=None, y=None, area=None, x0=-180., rfl=0):
         """Constructor for Mesh:
         shape - shape of cell array, (nj,ni)
         ni    - number of cells in x-direction (last index)
@@ -59,6 +58,7 @@ class GMesh:
         y     - latitude of mesh (cell corners) (1d or 2d)
         area  - area of cells (2d)
         x0    - used when generating a spherical grid in absence of (x,y)
+        rfl   - refining level of this mesh
         """
         if (shape is None) and (x is None) and (y is None): raise Exception('Either shape must be specified or both x and y')
         if (x is None) and (y is not None): raise Exception('Either shape must be specified or both x and y')
@@ -100,6 +100,9 @@ class GMesh:
             self.area = area
         else:
             self.area = None
+        
+        self.rfl = rfl #refining level
+
     def __repr__(self):
         return '<GMesh ni:%i nj:%i shape:(%i,%i)>'%(self.ni,self.nj,self.shape[0],self.shape[1])
     def __getitem__(self, key):
@@ -107,9 +110,11 @@ class GMesh:
 
     def dump(self):
         print(self)
-        print('x =',self.x)
-        print('y =',self.y)
-        print('area =',self.area)
+        print('x.rfl   =',self.rfl)
+        print('x.shape =',self.x.shape)
+        print('y.shape =',self.y.shape)
+        print('h.shape =',self.height.shape)
+
     def refineby2(self):
         """Returns new Mesh instance with twice the resolution"""
         x = np.zeros( (2*self.nj+1, 2*self.ni+1) )
@@ -123,8 +128,19 @@ class GMesh:
         y[::2,1::2] = 0.5 * ( self.y[:,:-1] + self.y[:,1:] )
         y[1::2,::2] = 0.5 * ( self.y[:-1,:] + self.y[1:,:] )
         y[1::2,1::2] = 0.25 * ( ( self.y[:-1,:-1] + self.y[1:,1:] ) + ( self.y[:-1,1:] + self.y[1:,:-1] ) )
-        return GMesh(x=x, y=y)
+        return GMesh(x=x, y=y, rfl=self.rfl+1)
         
+    def coarsenby2(self, coarser_mesh):
+        """Set the height for lower level Mesh by coarsening"""
+        if(self.rfl == 0): 
+            raise Exception('Coarsest grid, no more coarsening possible!')
+ 
+        coarser_mesh.height = self.height[::2,::2]
+        coarser_mesh.height[:-1,:-1] = 0.5*(coarser_mesh.height[:-1,:-1]+self.height[1::2,1::2])
+
+ #0.25 * (self.height[0:-1:2,0:-1:2] + self.height[1:-1:2,0:-1:2] + self.height[0:-1:2,1:-1:2] + self.height[1:-1:2,1:-1:2])
+        
+
     def find_nn_uniform_source(self,xs,ys):
         """Returns the i&j arrays for the indexes of the nearest neighbor point to each mesh point"""
         #Here we assume that the source mesh {(xs,ys)} is a uniform lat-lon mesh!
@@ -156,13 +172,6 @@ class GMesh:
         if xs.shape != ys.shape: raise Exception('xs and ys must be the same shape')
         nns_i,nns_j = self.find_nn_uniform_source(xs,ys) 
         hits = np.zeros(xs.shape)
-#Alistair: Can the following be Vectorized?        
-#        nj,ni = self.x.shape
-#        for i in range(0,ni):
-#            for j in range(0,nj):
-#                nn_ii=int(nns_i[j,i])
-#                nn_jj=int(nns_j[j,i])
-#                hits[nn_jj,nn_ii] += 1 
         hits[nns_j[:,:],nns_i[:,:]] = 1
 #Niki: Deal with the degenerate cases where source points are well outside the target domain 
 #      and are never going to be hit.
@@ -174,13 +183,6 @@ class GMesh:
         if xs.shape != ys.shape: raise Exception('xs and ys must be the same shape')
         nns_i,nns_j = self.find_nn_uniform_source(xs,ys) 
         self.height = np.zeros(self.x.shape)
-#Alistair: Can the following be Vectorized?        
-#        nj,ni = self.x.shape
-#        for i in range(0,ni):
-#            for j in range(0,nj):
-#                nn_ii=int(nns_i[j,i])
-#                nn_jj=int(nns_j[j,i])
-#                self.height[j,i] = zs[nn_jj,nn_ii]  
         self.height[:,:] = zs[nns_j[:,:],nns_i[:,:]]
         return 
 
