@@ -135,11 +135,10 @@ class GMesh:
         if(self.rfl == 0): 
             raise Exception('Coarsest grid, no more coarsening possible!')
  
-        coarser_mesh.height = self.height[::2,::2]
-        coarser_mesh.height[:-1,:-1] = 0.5*(coarser_mesh.height[:-1,:-1]+self.height[1::2,1::2])
-
- #0.25 * (self.height[0:-1:2,0:-1:2] + self.height[1:-1:2,0:-1:2] + self.height[0:-1:2,1:-1:2] + self.height[1:-1:2,1:-1:2])
-        
+        coarser_mesh.height = 0.25*( self.height[::2,::2]
+                                   + self.height[1::2,1::2]
+                                   + self.height[1:-1:2,0:-1:2]
+                                   + self.height[0:-1:2,1:-1:2])
 
     def find_nn_uniform_source(self,xs,ys):
         """Returns the i&j arrays for the indexes of the nearest neighbor point to each mesh point"""
@@ -177,13 +176,10 @@ class GMesh:
 #      and are never going to be hit.
         return hits
 
-#Niki: The following function can be combined with the above without much overhead to save an extra call
     def project_source_data_onto_target_mesh(self,xs,ys,zs):
         """Returns the array on target mesh with values equal to the nearest-neighbor source point data"""
         if xs.shape != ys.shape: raise Exception('xs and ys must be the same shape')
         nns_i,nns_j = self.find_nn_uniform_source(xs,ys) 
         self.height = np.zeros(self.x.shape)
         self.height[:,:] = zs[nns_j[:,:],nns_i[:,:]]
-        return 
-
-
+        return
