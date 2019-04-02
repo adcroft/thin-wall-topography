@@ -21,7 +21,7 @@ def is_source_uniform(xs,ys):
 def refine_loop(trg_lon_grid,trg_lat_grid, src_lon_grid,src_lat_grid, max_stages=5):
     """This function refines the target grid until all points in the source grid are sampled."""
     """It returns the list of the refined grids."""
-    GMesh_list = []    
+    GMesh_list = []
     GMesh_list.append(GMesh(x=trg_lon_grid,y=trg_lat_grid))
     i=0
     hits = GMesh_list[i].source_hits(src_lon_grid,src_lat_grid)
@@ -30,25 +30,25 @@ def refine_loop(trg_lon_grid,trg_lat_grid, src_lon_grid,src_lat_grid, max_stages
         GMesh_list.append(GMesh_list[i].refineby2())
         i=i+1
         hits = GMesh_list[i].source_hits(src_lon_grid,src_lat_grid)
-        
-    if(i > max_stages): 
+
+    if(i > max_stages):
         print("Warning: Maximum number of allowed refinements reached without all source points hit.")
-    else:        
+    else:
         print("Hit all! Done refining after ",i, " steps!")
-        
-    return GMesh_list, hits 
+
+    return GMesh_list, hits
 
 class GMesh:
     """Describes 2D meshes for ESMs.
-    
+
     Meshes have shape=(nj,ni) cells with (nj+1,ni+1) vertices with coordinates (x,y).
-    
+
     When constructing, either provide 1d or 2d coordinates (x,y), or assume a
     uniform spherical grid with 'shape' cells covering the whole sphere with
     longitudes starting at x0.
-    
+
     Attributes:
-    
+
     shape - (nj,ni)
     ni    - number of cells in x-direction (last)
     nj    - number of cells in y-direction (first)
@@ -108,7 +108,7 @@ class GMesh:
             self.area = area
         else:
             self.area = None
-        
+
         self.rfl = rfl #refining level
 
     def __repr__(self):
@@ -137,12 +137,12 @@ class GMesh:
         y[1::2,::2] = 0.5 * ( self.y[:-1,:] + self.y[1:,:] )
         y[1::2,1::2] = 0.25 * ( ( self.y[:-1,:-1] + self.y[1:,1:] ) + ( self.y[:-1,1:] + self.y[1:,:-1] ) )
         return GMesh(x=x, y=y, rfl=self.rfl+1)
-        
+
     def coarsenby2(self, coarser_mesh):
         """Set the height for lower level Mesh by coarsening"""
-        if(self.rfl == 0): 
+        if(self.rfl == 0):
             raise Exception('Coarsest grid, no more coarsening possible!')
- 
+
         coarser_mesh.height = 0.25*( self.height[::2,::2]
                                    + self.height[1::2,1::2]
                                    + self.height[1:-1:2,0:-1:2]
@@ -151,14 +151,14 @@ class GMesh:
     def find_nn_uniform_source(self,xs,ys):
         """Returns the i&j arrays for the indexes of the nearest neighbor point to each mesh point"""
         #Here we assume that the source mesh {(xs,ys)} is a uniform lat-lon mesh!
-        #In this case the index of the closest source point can be easily found by arithmetic.          
+        #In this case the index of the closest source point can be easily found by arithmetic.
         if (not is_source_uniform(xs,ys)): raise Exception('source grid is not uniform, this method will not work properly')
         delxs = xs[0,1] - xs[0,0]
-        delys = ys[1,0] - ys[0,0]        
+        delys = ys[1,0] - ys[0,0]
 #        nn_i = np.rint((self.x-xs[0,0])/delxs) #Nearest integer (the even one if equidistant)
-#        nn_j = np.rint((self.y-ys[0,0])/delys)   
+#        nn_j = np.rint((self.y-ys[0,0])/delys)
         nn_i = np.floor(0.5+(self.x-xs[0,0])/delxs) #Nearest integer (the upper one if equidistant)
-        nn_j = np.floor(0.5+(self.y-ys[0,0])/delys)  
+        nn_j = np.floor(0.5+(self.y-ys[0,0])/delys)
         #These must be bounded by the extents of the arrays
         upper_i=xs.shape[1]-1
         upper_j=ys.shape[0]-1
@@ -167,27 +167,27 @@ class GMesh:
         nn_i = np.where(nn_i<0, 0, nn_i)
         nn_j = np.where(nn_j<0, 0, nn_j)
         return nn_i.astype(int),nn_j.astype(int)
-    
+
     def source_hits(self, xs, ys):
         """Returns the number of times each source data point is sampled by this mesh"""
         #This depends on the sampling method
-        #Here we assume a Nearest Neighbor sampling. 
+        #Here we assume a Nearest Neighbor sampling.
         #For each GMesh point (x,y):
         #   find the nearest point on the source mesh {(xs,ys)}
         #   increment the number of hits for that source point
         #
         if xs.shape != ys.shape: raise Exception('xs and ys must be the same shape')
-        nns_i,nns_j = self.find_nn_uniform_source(xs,ys) 
+        nns_i,nns_j = self.find_nn_uniform_source(xs,ys)
         hits = np.zeros(xs.shape)
         hits[nns_j[:,:],nns_i[:,:]] = 1
-#Niki: Deal with the degenerate cases where source points are well outside the target domain 
+#Niki: Deal with the degenerate cases where source points are well outside the target domain
 #      and are never going to be hit.
         return hits
 
     def project_source_data_onto_target_mesh(self,xs,ys,zs):
         """Returns the array on target mesh with values equal to the nearest-neighbor source point data"""
         if xs.shape != ys.shape: raise Exception('xs and ys must be the same shape')
-        nns_i,nns_j = self.find_nn_uniform_source(xs,ys) 
+        nns_i,nns_j = self.find_nn_uniform_source(xs,ys)
         self.height = np.zeros(self.x.shape)
         self.height[:,:] = zs[nns_j[:,:],nns_i[:,:]]
         return
