@@ -4,11 +4,19 @@ import numpy as np
 
 def is_source_uniform(xs,ys):
     """Returns True if the input grid is uniform and False otherwise"""
-    delx = np.roll(xs,shift=-1, axis=1) - xs 
-    delx = delx[:,:-1]
-    dely = np.roll(ys,shift=-1, axis=0) - ys 
-    dely = dely[:-1,:]
-    return (np.all(np.isclose(delx, delx[0,0]))) and (np.all(np.isclose(dely, dely[0,0])))
+    def compare(array):
+        eps = np.finfo( array.dtype ).eps # Precision of datatype
+        delta = np.abs( array[1:] - array[:-1] ) # Difference along first axis
+        error = np.abs( array )
+        error = np.maximum( error[1:], error[:-1] ) # Error in difference
+        derror = np.abs( delta - delta.flatten()[0] ) # Tolerance to which comparison can be made
+        return np.all( derror < ( error + error.flatten()[0] ) )
+    assert len(xs.shape) == len(ys.shape), "Arguments xs and ys must have the same rank"
+    if len(xs.shape)==2: # 2D arrays
+        assert xs.shape == ys.shape, "Arguments xs and ys must have the same shape"
+    if len(xs.shape)>2 or len(ys.shape)>2:
+        raise Exception("Arguments must be either both be 1D or both be 2D arrays")
+    return compare(ys) and compare(xs.T)
 
 def refine_loop(trg_lon_grid,trg_lat_grid, src_lon_grid,src_lat_grid, max_stages=5):
     """This function refines the target grid until all points in the source grid are sampled."""
