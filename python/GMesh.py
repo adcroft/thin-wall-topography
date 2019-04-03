@@ -122,6 +122,12 @@ class GMesh:
         print('x.shape =',self.x.shape)
         print('y.shape =',self.y.shape)
 
+    def plot(self, axis, subsample=1, linecolor='k', **kwargs):
+        for i in range(0,self.ni+1,subsample):
+            axis.plot(self.x[:,i], self.y[:,i], linecolor, **kwargs)
+        for j in range(0,self.nj+1,subsample):
+            axis.plot(self.x[j,:], self.y[j,:], linecolor, **kwargs)
+
     def refineby2(self):
         """Returns new Mesh instance with twice the resolution"""
         x = np.zeros( (2*self.nj+1, 2*self.ni+1) )
