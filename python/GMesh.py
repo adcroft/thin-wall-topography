@@ -22,11 +22,11 @@ def refine_loop(trg_lon_grid,trg_lat_grid, src_lon_grid,src_lat_grid, max_stages
     """This function refines the target grid until all points in the source grid are sampled."""
     """It returns the list of the refined grids."""
     GMesh_list = []
-    GMesh_list.append(GMesh(x=trg_lon_grid,y=trg_lat_grid))
+    GMesh_list.append(GMesh(lon=trg_lon_grid,lat=trg_lat_grid))
     i=0
     hits = GMesh_list[i].source_hits(src_lon_grid,src_lat_grid)
     while(not np.all(hits) and i <= max_stages):
-        print("Missed some! Must Refine! Stage ", i+1, "grid shape", GMesh_list[i].x.shape)
+        print("Missed some! Must Refine! Stage ", i+1, "grid shape", GMesh_list[i].lon.shape)
         GMesh_list.append(GMesh_list[i].refineby2())
         i=i+1
         hits = GMesh_list[i].source_hits(src_lon_grid,src_lat_grid)
@@ -41,68 +41,68 @@ def refine_loop(trg_lon_grid,trg_lat_grid, src_lon_grid,src_lat_grid, max_stages
 class GMesh:
     """Describes 2D meshes for ESMs.
 
-    Meshes have shape=(nj,ni) cells with (nj+1,ni+1) vertices with coordinates (x,y).
+    Meshes have shape=(nj,ni) cells with (nj+1,ni+1) vertices with coordinates (lon,lat).
 
-    When constructing, either provide 1d or 2d coordinates (x,y), or assume a
+    When constructing, either provide 1d or 2d coordinates (lon,lat), or assume a
     uniform spherical grid with 'shape' cells covering the whole sphere with
-    longitudes starting at x0.
+    longitudes starting at lon0.
 
     Attributes:
 
     shape - (nj,ni)
-    ni    - number of cells in x-direction (last)
-    nj    - number of cells in y-direction (first)
-    x     - longitude of mesh (cell corners), shape (nj+1,ni=1)
-    y     - latitude of mesh (cell corners), shape (nj+1,ni=1)
+    ni    - number of cells in i-direction (last)
+    nj    - number of cells in j-direction (first)
+    lon   - longitude of mesh (cell corners), shape (nj+1,ni=1)
+    lat   - latitude of mesh (cell corners), shape (nj+1,ni=1)
     area  - area of cells, shape (nj,ni)
     """
 
-    def __init__(self, shape=None, x=None, y=None, area=None, x0=-180., rfl=0):
+    def __init__(self, shape=None, lon=None, lat=None, area=None, lon0=-180., rfl=0):
         """Constructor for Mesh:
         shape - shape of cell array, (nj,ni)
-        ni    - number of cells in x-direction (last index)
-        nj    - number of cells in y-direction (first index)
-        x     - longitude of mesh (cell corners) (1d or 2d)
-        y     - latitude of mesh (cell corners) (1d or 2d)
+        ni    - number of cells in i-direction (last index)
+        nj    - number of cells in j-direction (first index)
+        lon   - longitude of mesh (cell corners) (1d or 2d)
+        lat   - latitude of mesh (cell corners) (1d or 2d)
         area  - area of cells (2d)
-        x0    - used when generating a spherical grid in absence of (x,y)
+        lon0  - used when generating a spherical grid in absence of (lon,lat)
         rfl   - refining level of this mesh
         """
-        if (shape is None) and (x is None) and (y is None): raise Exception('Either shape must be specified or both x and y')
-        if (x is None) and (y is not None): raise Exception('Either shape must be specified or both x and y')
-        if (x is not None) and (y is None): raise Exception('Either shape must be specified or both x and y')
+        if (shape is None) and (lon is None) and (lat is None): raise Exception('Either shape must be specified or both lon and lat')
+        if (lon is None) and (lat is not None): raise Exception('Either shape must be specified or both lon and lat')
+        if (lon is not None) and (lat is None): raise Exception('Either shape must be specified or both lon and lat')
         # Determine shape
         if shape is not None:
             (nj,ni) = shape
-        else: # Determine shape from x and y
-            if (x is None) or (y is None): raise Exception('Either shape must be specified or both x and y')
-            if len(x.shape)==1: ni = x.shape[0]-1
-            elif len(x.shape)==2: ni = x.shape[1]-1
-            else: raise Exception('x must be 1D or 2D.')
-            if len(y.shape)==1 or len(y.shape)==2: nj = y.shape[0]-1
-            else: raise Exception('y must be 1D or 2D.')
+        else: # Determine shape from lon and lat
+            if (lon is None) or (lat is None): raise Exception('Either shape must be specified or both lon and lat')
+            if len(lon.shape)==1: ni = lon.shape[0]-1
+            elif len(lon.shape)==2: ni = lon.shape[1]-1
+            else: raise Exception('lon must be 1D or 2D.')
+            if len(lat.shape)==1 or len(lat.shape)==2: nj = lat.shape[0]-1
+            else: raise Exception('lat must be 1D or 2D.')
         self.ni = ni
         self.nj = nj
         self.shape = (nj,ni)
         # Check shape of arrays and construct 2d coordinates
-        if x is not None and y is not None:
-            if len(x.shape)==1:
-                if len(y.shape)>1: raise Exception('x and y must either be both 1d or both 2d')
-                if x.shape[0] != ni+1: raise Exception('x has the wrong length')
-            if len(y.shape)==1:
-                if len(x.shape)>1: raise Exception('x and y must either be both 1d or both 2d')
-                if y.shape[0] != nj+1: raise Exception('y has the wrong length')
-            if len(x.shape)==2 and len(y.shape)==2:
-                if x.shape != y.shape: raise Exception('x and y are 2d and must be the same size')
-                if x.shape != (nj+1,ni+1): raise Exception('x has the wrong size')
-                self.x = x
-                self.y = y
+        if lon is not None and lat is not None:
+            if len(lon.shape)==1:
+                if len(lat.shape)>1: raise Exception('lon and lat must either be both 1d or both 2d')
+                if lon.shape[0] != ni+1: raise Exception('lon has the wrong length')
+            if len(lat.shape)==1:
+                if len(lon.shape)>1: raise Exception('lon and lat must either be both 1d or both 2d')
+                if lat.shape[0] != nj+1: raise Exception('lat has the wrong length')
+            if len(lon.shape)==2 and len(lat.shape)==2:
+                if lon.shape != lat.shape: raise Exception('lon and lat are 2d and must be the same size')
+                if lon.shape != (nj+1,ni+1): raise Exception('lon has the wrong size')
+                self.lon = lon
+                self.lat = lat
             else:
-                self.x, self.y = np.meshgrid(x,y)
+                self.lon, self.lat = np.meshgrid(lon,lat)
         else: # Construct coordinates
-            y1d = np.linspace(-90.,90.,nj+1)
-            x1d = np.linspace(x0,x0+360.,ni+1)
-            self.x, self.y = np.meshgrid(x1d,y1d)
+            lon1d = np.linspace(-90.,90.,nj+1)
+            lat1d = np.linspace(lon0,lon0+360.,ni+1)
+            self.lon, self.lat = np.meshgrid(lon1d,lat1d)
         if area is not None:
             if area.shape != (nj,ni): raise Exception('area has the wrong shape or size')
             self.area = area
@@ -118,30 +118,30 @@ class GMesh:
 
     def dump(self):
         print(self)
-        print('x.rfl   =',self.rfl)
-        print('x.shape =',self.x.shape)
-        print('y.shape =',self.y.shape)
+        print('rfl   =',self.rfl)
+        print('lon.shape =',self.lon.shape)
+        print('lat.shape =',self.lat.shape)
 
     def plot(self, axis, subsample=1, linecolor='k', **kwargs):
         for i in range(0,self.ni+1,subsample):
-            axis.plot(self.x[:,i], self.y[:,i], linecolor, **kwargs)
+            axis.plot(self.lon[:,i], self.lat[:,i], linecolor, **kwargs)
         for j in range(0,self.nj+1,subsample):
-            axis.plot(self.x[j,:], self.y[j,:], linecolor, **kwargs)
+            axis.plot(self.lon[j,:], self.lat[j,:], linecolor, **kwargs)
 
     def refineby2(self):
         """Returns new Mesh instance with twice the resolution"""
-        x = np.zeros( (2*self.nj+1, 2*self.ni+1) )
-        y = np.zeros( (2*self.nj+1, 2*self.ni+1) )
-        #area = numpy.zeros( (2*self.nj, 2*self.ni) )
-        x[::2,::2] = self.x
-        x[::2,1::2] = 0.5 * ( self.x[:,:-1] + self.x[:,1:] )
-        x[1::2,::2] = 0.5 * ( self.x[:-1,:] + self.x[1:,:] )
-        x[1::2,1::2] = 0.25 * ( ( self.x[:-1,:-1] + self.x[1:,1:] ) + ( self.x[:-1,1:] + self.x[1:,:-1] ) )
-        y[::2,::2] = self.y
-        y[::2,1::2] = 0.5 * ( self.y[:,:-1] + self.y[:,1:] )
-        y[1::2,::2] = 0.5 * ( self.y[:-1,:] + self.y[1:,:] )
-        y[1::2,1::2] = 0.25 * ( ( self.y[:-1,:-1] + self.y[1:,1:] ) + ( self.y[:-1,1:] + self.y[1:,:-1] ) )
-        return GMesh(x=x, y=y, rfl=self.rfl+1)
+        lon = np.zeros( (2*self.nj+1, 2*self.ni+1) )
+        lat = np.zeros( (2*self.nj+1, 2*self.ni+1) )
+        #area = np.zeros( (2*self.nj, 2*self.ni) )
+        lon[::2,::2] = self.lon
+        lon[::2,1::2] = 0.5 * ( self.lon[:,:-1] + self.lon[:,1:] )
+        lon[1::2,::2] = 0.5 * ( self.lon[:-1,:] + self.lon[1:,:] )
+        lon[1::2,1::2] = 0.25 * ( ( self.lon[:-1,:-1] + self.lon[1:,1:] ) + ( self.lon[:-1,1:] + self.lon[1:,:-1] ) )
+        lat[::2,::2] = self.lat
+        lat[::2,1::2] = 0.5 * ( self.lat[:,:-1] + self.lat[:,1:] )
+        lat[1::2,::2] = 0.5 * ( self.lat[:-1,:] + self.lat[1:,:] )
+        lat[1::2,1::2] = 0.25 * ( ( self.lat[:-1,:-1] + self.lat[1:,1:] ) + ( self.lat[:-1,1:] + self.lat[1:,:-1] ) )
+        return GMesh(lon=lon, lat=lat, rfl=self.rfl+1)
 
     def coarsenby2(self, coarser_mesh):
         """Set the height for lower level Mesh by coarsening"""
@@ -153,20 +153,20 @@ class GMesh:
                                    + self.height[1:-1:2,0:-1:2]
                                    + self.height[0:-1:2,1:-1:2])
 
-    def find_nn_uniform_source(self, xs, ys):
-        """Returns the i,j arrays for the indexes of the nearest neighbor point to grid (xs,ys)"""
-        assert is_mesh_uniform(xs,ys), 'Grid (xs,ys) is not uniform, this method will not work properly'
-        if len(xs.shape)==2:
+    def find_nn_uniform_source(self, lon, lat):
+        """Returns the i,j arrays for the indexes of the nearest neighbor point to grid (lon,lat)"""
+        assert is_mesh_uniform(lon,lat), 'Grid (lon,lat) is not uniform, this method will not work properly'
+        if len(lon.shape)==2:
             # Convert to 1D arrays
-            xs,ys = xs[0,:],ys[:,0]
-        sni,snj =xs.shape[0],ys.shape[0] # Shape of source
+            lon,lat = lon[0,:],lat[:,0]
+        sni,snj =lon.shape[0],lat.shape[0] # Shape of source
         # Spacing on uniform mesh
-        delxs, delys = (xs[-1]-xs[0])/(sni-1), (ys[-1]-ys[0])/(snj-1)
-        if abs( (xs[-1]-xs[0])-360 )<=360.*np.finfo( xs.dtype ).eps:
+        dellon, dellat = (lon[-1]-lon[0])/(sni-1), (lat[-1]-lat[0])/(snj-1)
+        if abs( (lon[-1]-lon[0])-360 )<=360.*np.finfo( lon.dtype ).eps:
             sni-=1 # Account for repeated longitude
         # Nearest integer (the upper one if equidistant)
-        nn_i = np.mod( np.floor(0.5+(360.+self.x-xs[0])/delxs), sni)
-        nn_j = np.floor(0.5+(self.y-ys[0])/delys)
+        nn_i = np.mod( np.floor(0.5+(360.+self.lon-lon[0])/dellon), sni)
+        nn_j = np.floor(0.5+(self.lat-lat[0])/dellat)
         return nn_i.astype(int),nn_j.astype(int)
 
     def source_hits(self, xs, ys):
@@ -188,6 +188,6 @@ class GMesh:
         """Returns the array on target mesh with values equal to the nearest-neighbor source point data"""
         if xs.shape != ys.shape: raise Exception('xs and ys must be the same shape')
         nns_i,nns_j = self.find_nn_uniform_source(xs,ys)
-        self.height = np.zeros(self.x.shape)
+        self.height = np.zeros(self.lon.shape)
         self.height[:,:] = zs[nns_j[:,:],nns_i[:,:]]
         return
