@@ -153,24 +153,20 @@ class GMesh:
                                    + self.height[1:-1:2,0:-1:2]
                                    + self.height[0:-1:2,1:-1:2])
 
-    def find_nn_uniform_source(self,xs,ys):
-        """Returns the i&j arrays for the indexes of the nearest neighbor point to each mesh point"""
-        #Here we assume that the source mesh {(xs,ys)} is a uniform lat-lon mesh!
-        #In this case the index of the closest source point can be easily found by arithmetic.
-        assert is_mesh_uniform(xs,ys), 'Grid is not uniform, this method will not work properly'
-        delxs = xs[0,1] - xs[0,0]
-        delys = ys[1,0] - ys[0,0]
-#        nn_i = np.rint((self.x-xs[0,0])/delxs) #Nearest integer (the even one if equidistant)
-#        nn_j = np.rint((self.y-ys[0,0])/delys)
-        nn_i = np.floor(0.5+(self.x-xs[0,0])/delxs) #Nearest integer (the upper one if equidistant)
-        nn_j = np.floor(0.5+(self.y-ys[0,0])/delys)
-        #These must be bounded by the extents of the arrays
-        upper_i=xs.shape[1]-1
-        upper_j=ys.shape[0]-1
-        nn_i = np.where(nn_i>upper_i, upper_i, nn_i)
-        nn_j = np.where(nn_j>upper_j, upper_j, nn_j)
-        nn_i = np.where(nn_i<0, 0, nn_i)
-        nn_j = np.where(nn_j<0, 0, nn_j)
+    def find_nn_uniform_source(self, xs, ys):
+        """Returns the i,j arrays for the indexes of the nearest neighbor point to grid (xs,ys)"""
+        assert is_mesh_uniform(xs,ys), 'Grid (xs,ys) is not uniform, this method will not work properly'
+        if len(xs.shape)==2:
+            # Convert to 1D arrays
+            xs,ys = xs[0,:],ys[:,0]
+        sni,snj =xs.shape[0],ys.shape[0] # Shape of source
+        # Spacing on uniform mesh
+        delxs, delys = (xs[-1]-xs[0])/(sni-1), (ys[-1]-ys[0])/(snj-1)
+        if abs( (xs[-1]-xs[0])-360 )<=360.*np.finfo( xs.dtype ).eps:
+            sni-=1 # Account for repeated longitude
+        # Nearest integer (the upper one if equidistant)
+        nn_i = np.mod( np.floor(0.5+(360.+self.x-xs[0])/delxs), sni)
+        nn_j = np.floor(0.5+(self.y-ys[0])/delys)
         return nn_i.astype(int),nn_j.astype(int)
 
     def source_hits(self, xs, ys):
