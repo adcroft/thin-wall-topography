@@ -118,9 +118,8 @@ class GMesh:
 
     def dump(self):
         print(self)
-        print('rfl   =',self.rfl)
-        print('lon.shape =',self.lon.shape)
-        print('lat.shape =',self.lat.shape)
+        print('lon = ',self.lon)
+        print('lat = ',self.lat)
 
     def plot(self, axis, subsample=1, linecolor='k', **kwargs):
         for i in range(0,self.ni+1,subsample):
