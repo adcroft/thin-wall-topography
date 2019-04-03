@@ -2,8 +2,8 @@
 
 import numpy as np
 
-def is_source_uniform(xs,ys):
-    """Returns True if the input grid is uniform and False otherwise"""
+def is_mesh_uniform(lon,lat):
+    """Returns True if the input grid (lon,lat) is uniform and False otherwise"""
     def compare(array):
         eps = np.finfo( array.dtype ).eps # Precision of datatype
         delta = np.abs( array[1:] - array[:-1] ) # Difference along first axis
@@ -11,12 +11,12 @@ def is_source_uniform(xs,ys):
         error = np.maximum( error[1:], error[:-1] ) # Error in difference
         derror = np.abs( delta - delta.flatten()[0] ) # Tolerance to which comparison can be made
         return np.all( derror < ( error + error.flatten()[0] ) )
-    assert len(xs.shape) == len(ys.shape), "Arguments xs and ys must have the same rank"
-    if len(xs.shape)==2: # 2D arrays
-        assert xs.shape == ys.shape, "Arguments xs and ys must have the same shape"
-    if len(xs.shape)>2 or len(ys.shape)>2:
-        raise Exception("Arguments must be either both be 1D or both be 2D arrays")
-    return compare(ys) and compare(xs.T)
+    assert len(lon.shape) == len(lat.shape), "Arguments lon and lat must have the same rank"
+    if len(lon.shape)==2: # 2D arralat
+        assert lon.shape == lat.shape, "Arguments lon and lat must have the same shape"
+    if len(lon.shape)>2 or len(lat.shape)>2:
+        raise Exception("Arguments must be either both be 1D or both be 2D arralat")
+    return compare(lat) and compare(lon.T)
 
 def refine_loop(trg_lon_grid,trg_lat_grid, src_lon_grid,src_lat_grid, max_stages=5):
     """This function refines the target grid until all points in the source grid are sampled."""
@@ -112,7 +112,7 @@ class GMesh:
         self.rfl = rfl #refining level
 
     def __repr__(self):
-        return '<GMesh ni:%i nj:%i shape:(%i,%i)>'%(self.ni,self.nj,self.shape[0],self.shape[1])
+        return '<GMesh nj:%i ni:%i shape:(%i,%i)>'%(self.nj,self.ni,self.shape[0],self.shape[1])
     def __getitem__(self, key):
         return getattr(self, key)
 
@@ -121,7 +121,6 @@ class GMesh:
         print('x.rfl   =',self.rfl)
         print('x.shape =',self.x.shape)
         print('y.shape =',self.y.shape)
-        print('h.shape =',self.height.shape)
 
     def refineby2(self):
         """Returns new Mesh instance with twice the resolution"""
@@ -152,7 +151,7 @@ class GMesh:
         """Returns the i&j arrays for the indexes of the nearest neighbor point to each mesh point"""
         #Here we assume that the source mesh {(xs,ys)} is a uniform lat-lon mesh!
         #In this case the index of the closest source point can be easily found by arithmetic.
-        if (not is_source_uniform(xs,ys)): raise Exception('source grid is not uniform, this method will not work properly')
+        assert is_mesh_uniform(xs,ys), 'Grid is not uniform, this method will not work properly'
         delxs = xs[0,1] - xs[0,0]
         delys = ys[1,0] - ys[0,0]
 #        nn_i = np.rint((self.x-xs[0,0])/delxs) #Nearest integer (the even one if equidistant)
