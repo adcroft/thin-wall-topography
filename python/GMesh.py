@@ -177,7 +177,6 @@ class GMesh:
         #   find the nearest point on the source mesh {(xs,ys)}
         #   increment the number of hits for that source point
         #
-        if xs.shape != ys.shape: raise Exception('xs and ys must be the same shape')
         nns_i,nns_j = self.find_nn_uniform_source(xs,ys)
         hits = np.zeros(xs.shape)
         hits[nns_j[:,:],nns_i[:,:]] = 1
