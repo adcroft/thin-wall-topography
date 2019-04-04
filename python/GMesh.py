@@ -18,26 +18,6 @@ def is_mesh_uniform(lon,lat):
         raise Exception("Arguments must be either both be 1D or both be 2D arralat")
     return compare(lat) and compare(lon.T)
 
-def refine_loop(trg_lon_grid,trg_lat_grid, src_lon_grid,src_lat_grid, max_stages=5):
-    """This function refines the target grid until all points in the source grid are sampled."""
-    """It returns the list of the refined grids."""
-    GMesh_list = []
-    GMesh_list.append(GMesh(lon=trg_lon_grid,lat=trg_lat_grid))
-    i=0
-    hits = GMesh_list[i].source_hits(src_lon_grid,src_lat_grid)
-    while(not np.all(hits) and i <= max_stages):
-        print("Missed some! Must Refine! Stage ", i+1, "grid shape", GMesh_list[i].lon.shape)
-        GMesh_list.append(GMesh_list[i].refineby2())
-        i=i+1
-        hits = GMesh_list[i].source_hits(src_lon_grid,src_lat_grid)
-
-    if(i > max_stages):
-        print("Warning: Maximum number of allowed refinements reached without all source points hit.")
-    else:
-        print("Hit all! Done refining after ",i, " steps!")
-
-    return GMesh_list, hits
-
 class GMesh:
     """Describes 2D meshes for ESMs.
 
@@ -247,6 +227,29 @@ class GMesh:
         hits = np.zeros((snj,sni))
         hits[j,i] = 1
         return hits
+
+    def refine_loop(self, src_lon, src_lat, max_stages=6, verbose=True):
+        """Repeatedly refines the mesh until all cells in the source grid are intercepted by mesh nodes.
+           Returns a list of the refined meshes starting with parent mesh."""
+        GMesh_list, this = [self], self
+        hits = this.source_hits(src_lon,src_lat)
+        nhits, prev_hits = hits.sum().astype(int), 0
+        if verbose: print(this, 'Hit', hits.sum().astype(int),'out of', hits.size, 'cells')
+        # Conditions to refine
+        # 1) Not all cells are intercepted
+        # 2) A refinement intercepted more cells
+        while(not np.all(hits) and nhits>prev_hits and len(GMesh_list)<max_stages):
+            this = this.refineby2()
+            hits = this.source_hits(src_lon,src_lat)
+            nhits, prev_hits = hits.sum().astype(int), nhits
+            if nhits>prev_hits:
+                GMesh_list.append( this )
+                if verbose: print(this, 'Hit', nhits, 'out of', hits.size, 'cells')
+
+        if(len(GMesh_list) >= max_stages):
+            print("Warning: Maximum number of allowed refinements reached without all source cells hit.")
+
+        return GMesh_list
 
     def project_source_data_onto_target_mesh(self,xs,ys,zs):
         """Returns the array on target mesh with values equal to the nearest-neighbor source point data"""
