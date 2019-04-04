@@ -214,8 +214,12 @@ class GMesh:
         if abs( (lon[-1]-lon[0])-360 )<=360.*np.finfo( lon.dtype ).eps:
             sni-=1 # Account for repeated longitude
         # Nearest integer (the upper one if equidistant)
-        nn_i = np.mod( np.floor(0.5+(360.+self.lon-lon[0])/dellon), sni)
+        nn_i = np.floor(np.mod(self.lon-lon[0]+0.5*dellon,360)/dellon)
         nn_j = np.floor(0.5+(self.lat-lat[0])/dellat)
+        assert nn_j.min()>=0, 'Negative j index calculated! j='+str(nn_j.min())
+        assert nn_j.max()<snj, 'Out of bounds j index calculated! j='+str(nn_j.max())
+        assert nn_i.min()>=0, 'Negative i index calculated! i='+str(nn_i.min())
+        assert nn_i.max()<sni, 'Out of bounds i index calculated! i='+str(nn_i.max())
         return nn_i.astype(int),nn_j.astype(int)
 
     def source_hits(self, xs, ys):
