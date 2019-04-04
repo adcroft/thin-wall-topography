@@ -57,7 +57,7 @@ class GMesh:
     area  - area of cells, shape (nj,ni)
     """
 
-    def __init__(self, shape=None, lon=None, lat=None, area=None, lon0=-180., rfl=0):
+    def __init__(self, shape=None, lon=None, lat=None, area=None, lon0=-180., from_cell_center=False, rfl=0):
         """Constructor for Mesh:
         shape - shape of cell array, (nj,ni)
         ni    - number of cells in i-direction (last index)
@@ -81,6 +81,18 @@ class GMesh:
             else: raise Exception('lon must be 1D or 2D.')
             if len(lat.shape)==1 or len(lat.shape)==2: nj = lat.shape[0]-1
             else: raise Exception('lat must be 1D or 2D.')
+        if from_cell_center: # Replace cell center coordinates with node coordinates
+            ni,nj = ni+1, nj+1
+            tmp = np.zeros(ni+1)
+            tmp[1:-1] = 0.5 * ( lon[:-1] + lon[1:] )
+            tmp[0] = 1.5 * lon[0] - 0.5 * lon[1]
+            tmp[-1] = 1.5 * lon[-1] - 0.5 * lon[-2]
+            lon = tmp
+            tmp = np.zeros(nj+1)
+            tmp[1:-1] = 0.5 * ( lat[:-1] + lat[1:] )
+            tmp[0] = 1.5 * lat[0] - 0.5 * lat[1]
+            tmp[-1] = 1.5 * lat[-1] - 0.5 * lat[-2]
+            lat = tmp
         self.ni = ni
         self.nj = nj
         self.shape = (nj,ni)
@@ -126,6 +138,9 @@ class GMesh:
             axis.plot(self.lon[:,i], self.lat[:,i], linecolor, **kwargs)
         for j in range(0,self.nj+1,subsample):
             axis.plot(self.lon[j,:], self.lat[j,:], linecolor, **kwargs)
+
+    def pcolormesh(self, axis, data, **kwargs):
+        return axis.pcolormesh( self.lon, self.lat, data, **kwargs)
 
     def __lonlat_to_XYZ(lon, lat):
         """Private method. Returns 3d coordinates (X,Y,Z) of spherical coordiantes (lon,lat)."""
