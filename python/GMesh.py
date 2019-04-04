@@ -239,18 +239,13 @@ class GMesh:
         return nn_i.astype(int),nn_j.astype(int)
 
     def source_hits(self, xs, ys):
-        """Returns the number of times each source data point is sampled by this mesh"""
-        #This depends on the sampling method
-        #Here we assume a Nearest Neighbor sampling.
-        #For each GMesh point (x,y):
-        #   find the nearest point on the source mesh {(xs,ys)}
-        #   increment the number of hits for that source point
-        #
-        nns_i,nns_j = self.find_nn_uniform_source(xs,ys)
-        hits = np.zeros(xs.shape)
-        hits[nns_j[:,:],nns_i[:,:]] = 1
-#Niki: Deal with the degenerate cases where source points are well outside the target domain
-#      and are never going to be hit.
+        """Returns an mask array of 1's if a cell with center (xs,ys) is intercepted by a node
+           on the mesh, 0 if no node falls in a cell"""
+        # Indexes of nearest xs,ys to each node on the mesh
+        i,j = self.find_nn_uniform_source(xs,ys)
+        sni,snj =xs.shape[0],ys.shape[0] # Shape of source
+        hits = np.zeros((snj,sni))
+        hits[j,i] = 1
         return hits
 
     def project_source_data_onto_target_mesh(self,xs,ys,zs):
