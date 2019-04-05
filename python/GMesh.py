@@ -109,6 +109,7 @@ class GMesh:
         return getattr(self, key)
 
     def dump(self):
+        """Dump Mesh to tty."""
         print(self)
         print('lon = ',self.lon)
         print('lat = ',self.lat)
@@ -211,11 +212,14 @@ class GMesh:
         sni,snj =lon.shape[0],lat.shape[0] # Shape of source
         # Spacing on uniform mesh
         dellon, dellat = (lon[-1]-lon[0])/(sni-1), (lat[-1]-lat[0])/(snj-1)
+        assert self.lat.max()<=lat.max()+0.5*dellat, 'Mesh has latitudes above range of regular grid '+str(self.lat.max())+' '+str(lat.max()+0.5*dellat)
+        assert self.lat.min()>=lat.min()-0.5*dellat, 'Mesh has latitudes below range of regular grid '+str(self.lat.min())+' '+str(lat.min()-0.5*dellat)
         if abs( (lon[-1]-lon[0])-360 )<=360.*np.finfo( lon.dtype ).eps:
             sni-=1 # Account for repeated longitude
         # Nearest integer (the upper one if equidistant)
         nn_i = np.floor(np.mod(self.lon-lon[0]+0.5*dellon,360)/dellon)
         nn_j = np.floor(0.5+(self.lat-lat[0])/dellat)
+        nn_j = np.minimum(nn_j, snj-1)
         assert nn_j.min()>=0, 'Negative j index calculated! j='+str(nn_j.min())
         assert nn_j.max()<snj, 'Out of bounds j index calculated! j='+str(nn_j.max())
         assert nn_i.min()>=0, 'Negative i index calculated! i='+str(nn_i.min())
