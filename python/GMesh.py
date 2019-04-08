@@ -241,20 +241,22 @@ class GMesh:
            Returns a list of the refined meshes starting with parent mesh."""
         GMesh_list, this = [self], self
         hits = this.source_hits(src_lon,src_lat)
-        nhits, prev_hits = hits.sum().astype(int), 0
-        if verbose: print(this, 'Hit', hits.sum().astype(int),'out of', hits.size, 'cells')
+        nhits, prev_hits, mb = hits.sum().astype(int), 0, 2*8*this.shape[0]*this.shape[1]/1024/1024
+        if verbose: print(this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
         # Conditions to refine
         # 1) Not all cells are intercepted
         # 2) A refinement intercepted more cells
-        while(not np.all(hits) and nhits>prev_hits and len(GMesh_list)<max_stages):
+        converged = np.all(hits) or (nhits==prev_hits)
+        while(not converged and len(GMesh_list)<max_stages and 4*mb<max_mb):
             this = this.refineby2()
             hits = this.source_hits(src_lon,src_lat)
-            nhits, prev_hits = hits.sum().astype(int), nhits
+            nhits, prev_hits, mb = hits.sum().astype(int), nhits, 2*8*this.shape[0]*this.shape[1]/1024/1024
+            converged = np.all(hits) or (nhits==prev_hits)
             if nhits>prev_hits:
                 GMesh_list.append( this )
-                if verbose: print(this, 'Hit', nhits, 'out of', hits.size, 'cells')
+                if verbose: print(this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
 
-        if(len(GMesh_list) >= max_stages):
+        if not converged:
             print("Warning: Maximum number of allowed refinements reached without all source cells hit.")
 
         return GMesh_list
