@@ -226,21 +226,22 @@ class GMesh:
         assert nn_i.max()<sni, 'Out of bounds i index calculated! i='+str(nn_i.max())
         return nn_i.astype(int),nn_j.astype(int)
 
-    def source_hits(self, xs, ys):
+    def source_hits(self, xs, ys, singularity_radius=0.25):
         """Returns an mask array of 1's if a cell with center (xs,ys) is intercepted by a node
            on the mesh, 0 if no node falls in a cell"""
         # Indexes of nearest xs,ys to each node on the mesh
         i,j = self.find_nn_uniform_source(xs,ys)
         sni,snj =xs.shape[0],ys.shape[0] # Shape of source
         hits = np.zeros((snj,sni))
+        if singularity_radius>0: hits[np.abs(ys)>90-singularity_radius] = 1
         hits[j,i] = 1
         return hits
 
-    def refine_loop(self, src_lon, src_lat, max_stages=6, verbose=True):
+    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, verbose=True, singularity_radius=0.25):
         """Repeatedly refines the mesh until all cells in the source grid are intercepted by mesh nodes.
            Returns a list of the refined meshes starting with parent mesh."""
         GMesh_list, this = [self], self
-        hits = this.source_hits(src_lon,src_lat)
+        hits = this.source_hits(src_lon, src_lat, singularity_radius=singularity_radius)
         nhits, prev_hits, mb = hits.sum().astype(int), 0, 2*8*this.shape[0]*this.shape[1]/1024/1024
         if verbose: print(this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
         # Conditions to refine
@@ -249,7 +250,7 @@ class GMesh:
         converged = np.all(hits) or (nhits==prev_hits)
         while(not converged and len(GMesh_list)<max_stages and 4*mb<max_mb):
             this = this.refineby2()
-            hits = this.source_hits(src_lon,src_lat)
+            hits = this.source_hits(src_lon, src_lat, singularity_radius=singularity_radius)
             nhits, prev_hits, mb = hits.sum().astype(int), nhits, 2*8*this.shape[0]*this.shape[1]/1024/1024
             converged = np.all(hits) or (nhits==prev_hits)
             if nhits>prev_hits:
