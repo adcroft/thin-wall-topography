@@ -109,6 +109,7 @@ class GMesh:
         return getattr(self, key)
 
     def dump(self):
+        """Dump Mesh to tty."""
         print(self)
         print('lon = ',self.lon)
         print('lat = ',self.lat)
@@ -211,46 +212,52 @@ class GMesh:
         sni,snj =lon.shape[0],lat.shape[0] # Shape of source
         # Spacing on uniform mesh
         dellon, dellat = (lon[-1]-lon[0])/(sni-1), (lat[-1]-lat[0])/(snj-1)
+        assert self.lat.max()<=lat.max()+0.5*dellat, 'Mesh has latitudes above range of regular grid '+str(self.lat.max())+' '+str(lat.max()+0.5*dellat)
+        assert self.lat.min()>=lat.min()-0.5*dellat, 'Mesh has latitudes below range of regular grid '+str(self.lat.min())+' '+str(lat.min()-0.5*dellat)
         if abs( (lon[-1]-lon[0])-360 )<=360.*np.finfo( lon.dtype ).eps:
             sni-=1 # Account for repeated longitude
         # Nearest integer (the upper one if equidistant)
         nn_i = np.floor(np.mod(self.lon-lon[0]+0.5*dellon,360)/dellon)
         nn_j = np.floor(0.5+(self.lat-lat[0])/dellat)
+        nn_j = np.minimum(nn_j, snj-1)
         assert nn_j.min()>=0, 'Negative j index calculated! j='+str(nn_j.min())
         assert nn_j.max()<snj, 'Out of bounds j index calculated! j='+str(nn_j.max())
         assert nn_i.min()>=0, 'Negative i index calculated! i='+str(nn_i.min())
         assert nn_i.max()<sni, 'Out of bounds i index calculated! i='+str(nn_i.max())
         return nn_i.astype(int),nn_j.astype(int)
 
-    def source_hits(self, xs, ys):
+    def source_hits(self, xs, ys, singularity_radius=0.25):
         """Returns an mask array of 1's if a cell with center (xs,ys) is intercepted by a node
            on the mesh, 0 if no node falls in a cell"""
         # Indexes of nearest xs,ys to each node on the mesh
         i,j = self.find_nn_uniform_source(xs,ys)
         sni,snj =xs.shape[0],ys.shape[0] # Shape of source
         hits = np.zeros((snj,sni))
+        if singularity_radius>0: hits[np.abs(ys)>90-singularity_radius] = 1
         hits[j,i] = 1
         return hits
 
-    def refine_loop(self, src_lon, src_lat, max_stages=6, verbose=True):
+    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, verbose=True, singularity_radius=0.25):
         """Repeatedly refines the mesh until all cells in the source grid are intercepted by mesh nodes.
            Returns a list of the refined meshes starting with parent mesh."""
         GMesh_list, this = [self], self
-        hits = this.source_hits(src_lon,src_lat)
-        nhits, prev_hits = hits.sum().astype(int), 0
-        if verbose: print(this, 'Hit', hits.sum().astype(int),'out of', hits.size, 'cells')
+        hits = this.source_hits(src_lon, src_lat, singularity_radius=singularity_radius)
+        nhits, prev_hits, mb = hits.sum().astype(int), 0, 2*8*this.shape[0]*this.shape[1]/1024/1024
+        if verbose: print(this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
         # Conditions to refine
         # 1) Not all cells are intercepted
         # 2) A refinement intercepted more cells
-        while(not np.all(hits) and nhits>prev_hits and len(GMesh_list)<max_stages):
+        converged = np.all(hits) or (nhits==prev_hits)
+        while(not converged and len(GMesh_list)<max_stages and 4*mb<max_mb):
             this = this.refineby2()
-            hits = this.source_hits(src_lon,src_lat)
-            nhits, prev_hits = hits.sum().astype(int), nhits
+            hits = this.source_hits(src_lon, src_lat, singularity_radius=singularity_radius)
+            nhits, prev_hits, mb = hits.sum().astype(int), nhits, 2*8*this.shape[0]*this.shape[1]/1024/1024
+            converged = np.all(hits) or (nhits==prev_hits)
             if nhits>prev_hits:
                 GMesh_list.append( this )
-                if verbose: print(this, 'Hit', nhits, 'out of', hits.size, 'cells')
+                if verbose: print(this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
 
-        if(len(GMesh_list) >= max_stages):
+        if not converged:
             print("Warning: Maximum number of allowed refinements reached without all source cells hit.")
 
         return GMesh_list
