@@ -61,6 +61,13 @@ class ThinWalls(GMesh):
         self.zv_mean[-1,:] = self.zc_mean[-1,:]
         #self.zv_mean[0,:] = numpy.maximum( self.zc_mean[0,:], self.zc_mean[-1,:] )
         #self.zv_mean[-1,:] = numpy.maximum( self.zc_mean[0,:], self.zc_mean[-1,:] )
+    def coarsen(self):
+        M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2])
+        M.zc_mean = 0.25*( (self.zc_mean[::2,::2]+self.zc_mean[1::2,1::2])
+                          +(self.zc_mean[::2,1::2]+self.zc_mean[1::2,::2]) )
+        M.zu_mean = 0.5*( self.zu_mean[::2,::2] + self.zu_mean[1::2,::2] )
+        M.zv_mean = 0.5*( self.zv_mean[::2,::2] + self.zv_mean[::2,1::2] )
+        return M
     def plot(self, axis, thickness=0.2, metric='mean', *args, **kwargs):
         """Plots ThinWalls data."""
         def copy_coord(xy):
