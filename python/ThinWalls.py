@@ -1,13 +1,49 @@
 from GMesh import GMesh
 import numpy
 
+class Stats:
+    """Container for statistics fields
+
+    shape - shape of these arrays
+    min   - minimum value
+    max   - maximum value
+    mean  - mean value
+    """
+    def __init__(self, shape, values=None):
+        self.shape = shape
+        self.min = numpy.zeros(shape)
+        self.max = numpy.zeros(shape)
+        self.mean = numpy.zeros(shape)
+        if values is not None: self.set_equal(values)
+    def __repr__(self):
+        return '<Stats shape:(%i,%i)>'%(self.shape[0], self.shape[1])
+    def dump(self):
+        print('min:')
+        print(self.min)
+        print('mean:')
+        print(self.mean)
+        print('max:')
+        print(self.max)
+    def set_equal(self, values):
+        assert values.shape == self.shape, 'Data has the wrong shape!'
+        self.mean = values.copy()
+        self.min = values.copy()
+        self.max = values.copy()
+    def set(self, min, max, mean):
+        assert min.shape == self.shape, 'Min data has the wrong shape!'
+        assert max.shape == self.shape, 'Max data has the wrong shape!'
+        assert mean.shape == self.shape, 'Mean data has the wrong shape!'
+        self.mean = mean.copy()
+        self.min = min.copy()
+        self.max = max.copy()
+
 class ThinWalls(GMesh):
     """Container for thin wall topographic data and mesh.
 
     Additional members:
-    zc_simple_mean - mean elevation of cell, shape (nj,ni)
-    zu_simple_mean - mean elevation of western edge of cell, shape (nj,ni+1)
-    zv_simple_mean - mean elevation of southern edge of cell, shape (nj+1,nj)
+    c_simple - elevation statistics of cell, shape (nj,ni)
+    u_simple - elevation statistics of western edge of cell, shape (nj,ni+1)
+    v_simple - elevation statistics of southern edge of cell, shape (nj+1,nj)
     shapeu  - shape of zu_simple_mean, ie. =(nj,ni+1)
     shapev  - shape of zv_simple_mean, ie. =(nj+1,ni)
 
@@ -19,15 +55,9 @@ class ThinWalls(GMesh):
         GMesh.__init__(self, *args, **kwargs)
         self.shapeu = (self.nj, self.ni+1)
         self.shapev = (self.nj+1, self.ni)
-        self.zc_simple_mean = None
-        self.zc_simple_min = None
-        self.zc_simple_max = None
-        self.zu_simple_mean = None
-        self.zu_simple_min = None
-        self.zu_simple_max = None
-        self.zv_simple_mean = None
-        self.zv_simple_min = None
-        self.zv_simple_max = None
+        self.c_simple = Stats(self.shape)
+        self.u_simple = Stats(self.shapeu)
+        self.v_simple = Stats(self.shapev)
     def refine(self):
         """Returns new ThinWalls instance with twice the resolution."""
         M = super().refineby2()
@@ -35,68 +65,47 @@ class ThinWalls(GMesh):
     def dump(self):
         """Dump Mesh to tty."""
         super().dump()
-        print('zc_simple_mean =',self.zc_simple_mean)
-        print('zc_simple_min =',self.zc_simple_min)
-        print('zc_simple_max =',self.zc_simple_max)
-        print('zu_simple_mean =',self.zu_simple_mean)
-        print('zu_simple_min =',self.zu_simple_min)
-        print('zu_simple_max =',self.zu_simple_max)
-        print('zv_simple_mean =',self.zv_simple_mean)
-        print('zv_simple_min =',self.zv_simple_min)
-        print('zv_simple_max =',self.zv_simple_max)
+        self.c_simple.dump()
+        self.u_simple.dump()
+        self.v_simple.dump()
     def set_cell_mean(self, data):
         """Set elevation of cell center."""
         assert data.shape==self.shape, 'data argument has wrong shape'
-        self.zc_simple_mean = data.copy()
+        self.c_simple.set_equal(data)
     def set_edge_mean(self, datau, datav):
         """Set elevation of cell edges u,v."""
         assert datau.shape==self.shapeu, 'datau argument has wrong shape'
         assert datav.shape==self.shapev, 'datav argument has wrong shape'
-        self.zu_simple_mean = datau.copy()
-        self.zu_simple_min = datau.copy()
-        self.zu_simple_max = datau.copy()
-        self.zv_simple_mean = datav.copy()
-        self.zv_simple_min = datav.copy()
-        self.zv_simple_max = datav.copy()
-    def set_center_stats(self):
-        """Set stats of center from mean value."""
-        self.zc_simple_min = self.zc_simple_mean.copy()
-        self.zc_simple_max = self.zc_simple_mean.copy()
+        self.u_simple.set_equal(datau)
+        self.v_simple.set_equal(datav)
     def set_edge_to_step(self):
         """Set elevation of cell edges to step topography."""
-        self.zu_simple_mean = numpy.zeros(self.shapeu)
-        self.zu_simple_mean[:,1:-1] = numpy.maximum( self.zc_simple_mean[:,:-1], self.zc_simple_mean[:,1:] )
-        self.zu_simple_mean[:,0] = self.zc_simple_mean[:,0]
-        self.zu_simple_mean[:,-1] = self.zc_simple_mean[:,-1]
-        #self.zu_simple_mean[:,0] = numpy.maximum( self.zc_simple_mean[:,0], self.zc_simple_mean[:,-1] )
-        #self.zu_simple_mean[:,-1] = numpy.maximum( self.zc_simple_mean[:,0], self.zc_simple_mean[:,-1] )
-        self.zu_simple_min = self.zu_simple_mean.copy()
-        self.zu_simple_max = self.zu_simple_mean.copy()
-        self.zv_simple_mean = numpy.zeros(self.shapev)
-        self.zv_simple_mean[1:-1,:] = numpy.maximum( self.zc_simple_mean[:-1,:], self.zc_simple_mean[1:,:] )
-        self.zv_simple_mean[0,:] = self.zc_simple_mean[0,:]
-        self.zv_simple_mean[-1,:] = self.zc_simple_mean[-1,:]
-        #self.zv_simple_mean[0,:] = numpy.maximum( self.zc_simple_mean[0,:], self.zc_simple_mean[-1,:] )
-        #self.zv_simple_mean[-1,:] = numpy.maximum( self.zc_simple_mean[0,:], self.zc_simple_mean[-1,:] )
-        self.zv_simple_min = self.zv_simple_mean.copy()
-        self.zv_simple_max = self.zv_simple_mean.copy()
-        if self.zc_simple_min is None: self.set_center_stats()
+        tmp = numpy.zeros(self.shapeu)
+        tmp[:,1:-1] = numpy.maximum( self.c_simple.mean[:,:-1], self.c_simple.mean[:,1:] )
+        tmp[:,0] = self.c_simple.mean[:,0]
+        tmp[:,-1] = self.c_simple.mean[:,-1]
+        self.u_simple.set_equal( tmp )
+        tmp = numpy.zeros(self.shapev)
+        tmp[1:-1,:] = numpy.maximum( self.c_simple.mean[:-1,:], self.c_simple.mean[1:,:] )
+        tmp[0,:] = self.c_simple.mean[0,:]
+        tmp[-1,:] = self.c_simple.mean[-1,:]
+        self.v_simple.set_equal( tmp )
     def coarsen(self):
         M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2])
-        M.zc_simple_mean = 0.25*( (self.zc_simple_mean[::2,::2]+self.zc_simple_mean[1::2,1::2])
-                          +(self.zc_simple_mean[::2,1::2]+self.zc_simple_mean[1::2,::2]) )
-        M.zc_simple_min = numpy.minimum(
-                     numpy.minimum( self.zc_simple_min[::2,::2], self.zc_simple_min[1::2,1::2]),
-                     numpy.minimum( self.zc_simple_min[::2,1::2], self.zc_simple_min[1::2,::2]) )
-        M.zc_simple_max = numpy.maximum(
-                     numpy.maximum( self.zc_simple_max[::2,::2], self.zc_simple_max[1::2,1::2]),
-                     numpy.minimum( self.zc_simple_max[::2,1::2], self.zc_simple_max[1::2,::2]) )
-        M.zu_simple_mean = 0.5*( self.zu_simple_mean[::2,::2] + self.zu_simple_mean[1::2,::2] )
-        M.zu_simple_min = numpy.minimum( self.zu_simple_min[::2,::2], self.zu_simple_min[1::2,::2] )
-        M.zu_simple_max = numpy.maximum( self.zu_simple_max[::2,::2], self.zu_simple_max[1::2,::2] )
-        M.zv_simple_mean = 0.5*( self.zv_simple_mean[::2,::2] + self.zv_simple_mean[::2,1::2] )
-        M.zv_simple_min = numpy.minimum( self.zv_simple_min[::2,::2], self.zv_simple_min[::2,1::2] )
-        M.zv_simple_max = numpy.maximum( self.zv_simple_max[::2,::2], self.zv_simple_max[::2,1::2] )
+        M.c_simple.mean = 0.25*( (self.c_simple.mean[::2,::2]+self.c_simple.mean[1::2,1::2])
+                         +(self.c_simple.mean[::2,1::2]+self.c_simple.mean[1::2,::2]) )
+        M.c_simple.min = numpy.minimum(
+                    numpy.minimum( self.c_simple.min[::2,::2], self.c_simple.min[1::2,1::2]),
+                    numpy.minimum( self.c_simple.min[::2,1::2], self.c_simple.min[1::2,::2]) )
+        M.c_simple.max = numpy.maximum(
+                    numpy.maximum( self.c_simple.max[::2,::2], self.c_simple.max[1::2,1::2]),
+                    numpy.minimum( self.c_simple.max[::2,1::2], self.c_simple.max[1::2,::2]) )
+        M.u_simple.mean = 0.5*( self.u_simple.mean[::2,::2] + self.u_simple.mean[1::2,::2] )
+        M.u_simple.min = numpy.minimum( self.u_simple.min[::2,::2], self.u_simple.min[1::2,::2] )
+        M.u_simple.max = numpy.maximum( self.u_simple.max[::2,::2], self.u_simple.max[1::2,::2] )
+        M.v_simple.mean = 0.5*( self.v_simple.mean[::2,::2] + self.v_simple.mean[::2,1::2] )
+        M.v_simple.min = numpy.minimum( self.v_simple.min[::2,::2], self.v_simple.min[::2,1::2] )
+        M.v_simple.max = numpy.maximum( self.v_simple.max[::2,::2], self.v_simple.max[::2,1::2] )
         return M
     def plot(self, axis, thickness=0.2, metric='mean', *args, **kwargs):
         """Plots ThinWalls data."""
@@ -123,11 +132,11 @@ class ThinWalls(GMesh):
             tmp[::2,1::2] = v
             return axis.pcolormesh(lon, lat, tmp, *args, **kwargs)
         if metric is 'mean':
-            return pcol_elev( self.zc_simple_mean, self.zu_simple_mean, self.zv_simple_mean )
+            return pcol_elev( self.c_simple.mean, self.u_simple.mean, self.v_simple.mean )
         elif metric is 'min':
-            return pcol_elev( self.zc_simple_min, self.zu_simple_min, self.zv_simple_min )
+            return pcol_elev( self.c_simple.min, self.u_simple.min, self.v_simple.min )
         elif metric is 'max':
-            return pcol_elev( self.zc_simple_max, self.zu_simple_max, self.zv_simple_max )
+            return pcol_elev( self.c_simple.max, self.u_simple.max, self.v_simple.max )
         else: raise Exception('Unknown "metric"')
     def plot_grid(self, axis, *args, **kwargs):
         """Plots ThinWalls mesh."""
