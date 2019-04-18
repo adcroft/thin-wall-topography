@@ -219,11 +219,12 @@ class GMesh:
         # Nearest integer (the upper one if equidistant)
         nn_i = np.floor(np.mod(self.lon-lon[0]+0.5*dellon,360)/dellon)
         nn_j = np.floor(0.5+(self.lat-lat[0])/dellat)
+        nn_i = np.minimum(nn_i, sni-1)
         nn_j = np.minimum(nn_j, snj-1)
         assert nn_j.min()>=0, 'Negative j index calculated! j='+str(nn_j.min())
-        assert nn_j.max()<snj, 'Out of bounds j index calculated! j='+str(nn_j.max())
+        assert nn_j.max()<snj, 'Out of bounds j index calculated! j='+str(nn_j.max())+'snj='+str(snj)
         assert nn_i.min()>=0, 'Negative i index calculated! i='+str(nn_i.min())
-        assert nn_i.max()<sni, 'Out of bounds i index calculated! i='+str(nn_i.max())
+        assert nn_i.max()<sni, 'Out of bounds i index calculated! i='+str(nn_i.max())+'sni='+str(sni)
         return nn_i.astype(int),nn_j.astype(int)
 
     def source_hits(self, xs, ys, singularity_radius=0.25):
@@ -262,10 +263,11 @@ class GMesh:
 
         return GMesh_list
 
-    def project_source_data_onto_target_mesh(self,xs,ys,zs):
+    def sample_source_data_on_target_mesh(self,xs,ys,zs):
         """Returns the array on target mesh with values equal to the nearest-neighbor source point data"""
-        if xs.shape != ys.shape: raise Exception('xs and ys must be the same shape')
-        nns_i,nns_j = self.find_nn_uniform_source(xs,ys)
+        # Indexes of nearest xs,ys to each node on the mesh
+        i,j = self.find_nn_uniform_source(xs,ys)
         self.height = np.zeros(self.lon.shape)
-        self.height[:,:] = zs[nns_j[:,:],nns_i[:,:]]
+        self.height[:,:] = zs[j[:],i[:]]
         return
+
