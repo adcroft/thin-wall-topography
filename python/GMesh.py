@@ -193,7 +193,18 @@ class GMesh:
 
         return self
 
-    def coarsenby2(self, coarser_mesh):
+    def coarsenby2_v0(self, coarser_mesh):
+        """Set the height for lower level Mesh by coarsening"""
+        if(self.rfl == 0):
+            raise Exception('Coarsest grid, no more coarsening possible!')
+
+        coarser_mesh.height = self.height[::2,::2]
+        coarser_mesh.height[:-1,:-1] = 0.25*(coarser_mesh.height[:-1,:-1]
+                                   + self.height[1::2,1::2]
+                                   + self.height[1:-1:2,0:-1:2]
+                                   + self.height[0:-1:2,1:-1:2])
+
+    def coarsenby2(self, coarser_mesh): #Crashes with ValueError: operands could not be broadcast together with shapes (7577,11513) (7576,11512)
         """Set the height for lower level Mesh by coarsening"""
         if(self.rfl == 0):
             raise Exception('Coarsest grid, no more coarsening possible!')
@@ -202,6 +213,16 @@ class GMesh:
                                    + self.height[1::2,1::2]
                                    + self.height[1:-1:2,0:-1:2]
                                    + self.height[0:-1:2,1:-1:2])
+
+    def coarsenby2_v1(self, coarser_mesh): 
+        """Set the height for lower level Mesh by coarsening"""
+        if(self.rfl == 0):
+            raise Exception('Coarsest grid, no more coarsening possible!')
+
+        coarser_mesh.height = 0.25*( self.height[0:-1:2,0:-1:2]
+                                   + self.height[1::2,1::2]
+                                   + self.height[1::2,0:-1:2]
+                                   + self.height[0:-1:2,1::2])
 
     def find_nn_uniform_source(self, lon, lat):
         """Returns the i,j arrays for the indexes of the nearest neighbor point to grid (lon,lat)"""
