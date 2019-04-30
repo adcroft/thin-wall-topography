@@ -126,13 +126,12 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs):
     for i in reversed(range(1,len(Glist))):   # 1, makes it stop at element 1 rather than 0
         Glist[i].coarsenby2_v0(Glist[i-1])
 
-    Hlist.append(Glist[0].height)
     
     #print("Writing ...")
     #filename = 'topog_refsamp_BP.nc'+str(b) 
     #write_topog(Glist[0].height,fnam=filename,no_changing_meta=True)
     #print("haigts shape:", lons[b].shape,Hlist[b].shape)
-    return Hlist
+    return Glist[0].height
 
 
 def main(argv):
@@ -191,7 +190,7 @@ def main(argv):
     for part in range(0,xb):
         lon = lons[part]
         lat = lats[part]
-        Hlist = do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs)
+        Hlist.append(do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs))
 
     height_refsamp = undo_break_array_to_blocks(Hlist,xb,yb)
     filename = 'topog_refsamp_BP.nc' 
