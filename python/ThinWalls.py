@@ -5,73 +5,73 @@ class Stats:
     """Container for statistics fields
 
     shape - shape of these arrays
-    min   - minimum value
-    max   - maximum value
-    mean  - mean value
+    low   - minimum value
+    hgh   - maximum value
+    ave   - mean value
     """
     def __init__(self, shape, mean=None, min=None, max=None):
         self.shape = shape
-        self.min = numpy.zeros(shape)
-        self.max = numpy.zeros(shape)
-        self.mean = numpy.zeros(shape)
+        self.low = numpy.zeros(shape)
+        self.hgh = numpy.zeros(shape)
+        self.ave = numpy.zeros(shape)
         if mean is not None: self.set_equal(mean)
         if min is not None: self.set_equal(min)
         if max is not None: self.set_equal(max)
     def __repr__(self):
         return '<Stats shape:(%i,%i)>'%(self.shape[0], self.shape[1])
     def __copy__(self):
-        return Stats(self.shape, mean=self.mean, min=self.min, max=self.max)
+        return Stats(self.shape, mean=self.ave, min=self.low, max=self.hgh)
     def copy(self):
         """Returns new instance with copied values"""
         return self.__copy__()
     def dump(self):
         print('min:')
-        print(self.min)
+        print(self.low)
         print('mean:')
-        print(self.mean)
+        print(self.ave)
         print('max:')
-        print(self.max)
+        print(self.hgh)
     def set_equal(self, values):
         assert values.shape == self.shape, 'Data has the wrong shape!'
-        self.mean = values.copy()
-        self.min = values.copy()
-        self.max = values.copy()
+        self.ave = values.copy()
+        self.low = values.copy()
+        self.hgh = values.copy()
     def set(self, min, max, mean):
         assert min.shape == self.shape, 'Min data has the wrong shape!'
         assert max.shape == self.shape, 'Max data has the wrong shape!'
         assert mean.shape == self.shape, 'Mean data has the wrong shape!'
-        self.mean = mean.copy()
-        self.min = min.copy()
-        self.max = max.copy()
+        self.ave = mean.copy()
+        self.low = min.copy()
+        self.hgh = max.copy()
     def mean4(self):
         """Return 2d/4-point mean"""
-        return 0.25*( (self.mean[::2,::2]+self.mean[1::2,1::2]) + (self.mean[::2,1::2]+self.mean[1::2,::2]) )
+        return 0.25*( (self.ave[::2,::2]+self.ave[1::2,1::2]) + (self.ave[::2,1::2]+self.ave[1::2,::2]) )
     def min4(self):
         """Return 2d/4-point minimum"""
-        return numpy.minimum( numpy.minimum( self.min[::2,::2], self.min[1::2,1::2]),
-                              numpy.minimum( self.min[::2,1::2], self.min[1::2,::2]) )
+        return numpy.minimum( numpy.minimum( self.low[::2,::2], self.low[1::2,1::2]),
+                              numpy.minimum( self.low[::2,1::2], self.low[1::2,::2]) )
     def max4(self):
         """Return 2d/4-point maximum"""
-        return numpy.maximum( numpy.maximum( self.max[::2,::2], self.max[1::2,1::2]),
-                              numpy.maximum( self.max[::2,1::2], self.max[1::2,::2]) )
+        return numpy.maximum( numpy.maximum( self.hgh[::2,::2], self.hgh[1::2,1::2]),
+                              numpy.maximum( self.hgh[::2,1::2], self.hgh[1::2,::2]) )
     def mean2u(self):
         """Return 2d/2-point mean on u-edges"""
-        return 0.5*( self.mean[::2,::2] + self.mean[1::2,::2] )
+        return 0.5*( self.ave[::2,::2] + self.ave[1::2,::2] )
     def min2u(self):
         """Return 2d/2-point minimum on u-edges"""
-        return numpy.minimum( self.min[::2,::2], self.min[1::2,::2] )
+        return numpy.minimum( self.low[::2,::2], self.low[1::2,::2] )
     def max2u(self):
         """Return 2d/2-point maximum on u-edges"""
-        return numpy.maximum( self.max[::2,::2], self.max[1::2,::2] )
+        return numpy.maximum( self.hgh[::2,::2], self.hgh[1::2,::2] )
     def mean2v(self):
         """Return 2d/2-point mean on v-edges"""
-        return 0.5*( self.mean[::2,::2] + self.mean[::2,1::2] )
+        return 0.5*( self.ave[::2,::2] + self.ave[::2,1::2] )
     def min2v(self):
         """Return 2d/2-point minimum on v-edges"""
-        return numpy.minimum( self.min[::2,::2], self.min[::2,1::2] )
+        return numpy.minimum( self.low[::2,::2], self.low[::2,1::2] )
     def max2v(self):
         """Return 2d/2-point maximum on v-edges"""
-        return numpy.maximum( self.max[::2,::2], self.max[::2,1::2] )
+        return numpy.maximum( self.hgh[::2,::2], self.hgh[::2,1::2] )
 
 class ThinWalls(GMesh):
     """Container for thin wall topographic data and mesh.
@@ -140,14 +140,14 @@ class ThinWalls(GMesh):
     def set_edge_to_step(self):
         """Set elevation of cell edges to step topography."""
         tmp = numpy.zeros(self.shapeu)
-        tmp[:,1:-1] = numpy.maximum( self.c_simple.mean[:,:-1], self.c_simple.mean[:,1:] )
-        tmp[:,0] = self.c_simple.mean[:,0]
-        tmp[:,-1] = self.c_simple.mean[:,-1]
+        tmp[:,1:-1] = numpy.maximum( self.c_simple.ave[:,:-1], self.c_simple.ave[:,1:] )
+        tmp[:,0] = self.c_simple.ave[:,0]
+        tmp[:,-1] = self.c_simple.ave[:,-1]
         self.u_simple.set_equal( tmp )
         tmp = numpy.zeros(self.shapev)
-        tmp[1:-1,:] = numpy.maximum( self.c_simple.mean[:-1,:], self.c_simple.mean[1:,:] )
-        tmp[0,:] = self.c_simple.mean[0,:]
-        tmp[-1,:] = self.c_simple.mean[-1,:]
+        tmp[1:-1,:] = numpy.maximum( self.c_simple.ave[:-1,:], self.c_simple.ave[1:,:] )
+        tmp[0,:] = self.c_simple.ave[0,:]
+        tmp[-1,:] = self.c_simple.ave[-1,:]
         self.v_simple.set_equal( tmp )
     def push_corners(self, update_interior_mean_max=True):
         """Folds out tallest corners. Acts only on "effective" values.
@@ -161,24 +161,24 @@ class ThinWalls(GMesh):
         # Alias
         C, U, V = self.c_effective, self.u_effective, self.v_effective
         # Flip in j direction
-        C.min, C.mean, C.max = numpy.flip( C.min, axis=0 ), numpy.flip( C.mean, axis=0 ), numpy.flip( C.max, axis=0 )
-        U.min, U.mean, U.max = numpy.flip( U.min, axis=0 ), numpy.flip( U.mean, axis=0 ), numpy.flip( U.max, axis=0 )
-        V.min, V.mean, V.max = numpy.flip( V.min, axis=0 ), numpy.flip( V.mean, axis=0 ), numpy.flip( V.max, axis=0 )
+        C.low, C.ave, C.hgh = numpy.flip( C.low, axis=0 ), numpy.flip( C.ave, axis=0 ), numpy.flip( C.hgh, axis=0 )
+        U.low, U.ave, U.hgh = numpy.flip( U.low, axis=0 ), numpy.flip( U.ave, axis=0 ), numpy.flip( U.hgh, axis=0 )
+        V.low, V.ave, V.hgh = numpy.flip( V.low, axis=0 ), numpy.flip( V.ave, axis=0 ), numpy.flip( V.hgh, axis=0 )
         self.push_corners_sw(update_interior_mean_max=update_interior_mean_max) # Push NW
         # Flip in i direction
-        C.min, C.mean, C.max = numpy.flip( C.min, axis=1 ), numpy.flip( C.mean, axis=1 ), numpy.flip( C.max, axis=1 )
-        U.min, U.mean, U.max = numpy.flip( U.min, axis=1 ), numpy.flip( U.mean, axis=1 ), numpy.flip( U.max, axis=1 )
-        V.min, V.mean, V.max = numpy.flip( V.min, axis=1 ), numpy.flip( V.mean, axis=1 ), numpy.flip( V.max, axis=1 )
+        C.low, C.ave, C.hgh = numpy.flip( C.low, axis=1 ), numpy.flip( C.ave, axis=1 ), numpy.flip( C.hgh, axis=1 )
+        U.low, U.ave, U.hgh = numpy.flip( U.low, axis=1 ), numpy.flip( U.ave, axis=1 ), numpy.flip( U.hgh, axis=1 )
+        V.low, V.ave, V.hgh = numpy.flip( V.low, axis=1 ), numpy.flip( V.ave, axis=1 ), numpy.flip( V.hgh, axis=1 )
         self.push_corners_sw(update_interior_mean_max=update_interior_mean_max) # Push NE
         # Flip in j direction
-        C.min, C.mean, C.max = numpy.flip( C.min, axis=0 ), numpy.flip( C.mean, axis=0 ), numpy.flip( C.max, axis=0 )
-        U.min, U.mean, U.max = numpy.flip( U.min, axis=0 ), numpy.flip( U.mean, axis=0 ), numpy.flip( U.max, axis=0 )
-        V.min, V.mean, V.max = numpy.flip( V.min, axis=0 ), numpy.flip( V.mean, axis=0 ), numpy.flip( V.max, axis=0 )
+        C.low, C.ave, C.hgh = numpy.flip( C.low, axis=0 ), numpy.flip( C.ave, axis=0 ), numpy.flip( C.hgh, axis=0 )
+        U.low, U.ave, U.hgh = numpy.flip( U.low, axis=0 ), numpy.flip( U.ave, axis=0 ), numpy.flip( U.hgh, axis=0 )
+        V.low, V.ave, V.hgh = numpy.flip( V.low, axis=0 ), numpy.flip( V.ave, axis=0 ), numpy.flip( V.hgh, axis=0 )
         self.push_corners_sw(update_interior_mean_max=update_interior_mean_max) # Push SE
         # Flip in i direction
-        C.min, C.mean, C.max = numpy.flip( C.min, axis=1 ), numpy.flip( C.mean, axis=1 ), numpy.flip( C.max, axis=1 )
-        U.min, U.mean, U.max = numpy.flip( U.min, axis=1 ), numpy.flip( U.mean, axis=1 ), numpy.flip( U.max, axis=1 )
-        V.min, V.mean, V.max = numpy.flip( V.min, axis=1 ), numpy.flip( V.mean, axis=1 ), numpy.flip( V.max, axis=1 )
+        C.low, C.ave, C.hgh = numpy.flip( C.low, axis=1 ), numpy.flip( C.ave, axis=1 ), numpy.flip( C.hgh, axis=1 )
+        U.low, U.ave, U.hgh = numpy.flip( U.low, axis=1 ), numpy.flip( U.ave, axis=1 ), numpy.flip( U.hgh, axis=1 )
+        V.low, V.ave, V.hgh = numpy.flip( V.low, axis=1 ), numpy.flip( V.ave, axis=1 ), numpy.flip( V.hgh, axis=1 )
 
     def push_corners_sw(self, update_interior_mean_max=True):
         """Folds out tallest corners. Acts only on "effective" values.
@@ -190,59 +190,59 @@ class ThinWalls(GMesh):
         # Alias
         C,U,V = self.c_effective,self.u_effective,self.v_effective
         # Inner SW corner
-        crnr_min = numpy.minimum( U.min[::2,1::2], V.min[1::2,::2] )    # Min or "sill" for SW corner
-        crnr_mean = 0.5*( U.mean[::2,1::2] + V.mean[1::2,::2] )         # Mean for SW corner
-        crnr_max = numpy.maximum( U.max[::2,1::2], V.max[1::2,::2] )    # Max for SW corner
+        crnr_min = numpy.minimum( U.low[::2,1::2], V.low[1::2,::2] )    # Min or "sill" for SW corner
+        crnr_mean = 0.5*( U.ave[::2,1::2] + V.ave[1::2,::2] )         # Mean for SW corner
+        crnr_max = numpy.maximum( U.hgh[::2,1::2], V.hgh[1::2,::2] )    # Max for SW corner
         # Values for the coarse cell outside of the SW corner
-        opp_ridge = numpy.maximum( U.min[1::2,1::2], V.min[1::2,1::2] ) # Ridge for NE corner
-        opp_cmean = ( ( C.mean[::2,1::2] + C.mean[1::2,::2] ) + C.mean[1::2,1::2] )/3 # Mean of outer cells
+        opp_ridge = numpy.maximum( U.low[1::2,1::2], V.low[1::2,1::2] ) # Ridge for NE corner
+        opp_cmean = ( ( C.ave[::2,1::2] + C.ave[1::2,::2] ) + C.ave[1::2,1::2] )/3 # Mean of outer cells
         j,i = numpy.nonzero( crnr_min>opp_ridge )  # Find where the SW corner has the highest sill
         if len(i)>0:
             J,I = 2*j,2*i
             # Replace inner minimum values with ridge value
             # - set inner SW corner sill to peak of the NW ridge to avoid introducing a new deep diagonal
             #   connection across the interior of the coarse cell
-            U.min[J,I+1] = opp_ridge[j,i]
-            V.min[J+1,I] = opp_ridge[j,i]
+            U.low[J,I+1] = opp_ridge[j,i]
+            V.low[J+1,I] = opp_ridge[j,i]
             # ????? No replace inner mean and max ???? Not used?
             # Override outer SW edge values with SW corner inner values
-            U.min[J,I] = numpy.maximum( U.min[J,I], crnr_min[j,i] )
-            V.min[J,I] = numpy.maximum( V.min[J,I], crnr_min[j,i] )
-            U.mean[J,I] = numpy.maximum( U.mean[J,I], crnr_mean[j,i] )
-            V.mean[J,I] = numpy.maximum( V.mean[J,I], crnr_mean[j,i] )
-            U.max[J,I] = numpy.maximum( U.max[J,I], crnr_max[j,i] )
-            V.max[J,I] = numpy.maximum( V.max[J,I], crnr_max[j,i] )
+            U.low[J,I] = numpy.maximum( U.low[J,I], crnr_min[j,i] )
+            V.low[J,I] = numpy.maximum( V.low[J,I], crnr_min[j,i] )
+            U.ave[J,I] = numpy.maximum( U.ave[J,I], crnr_mean[j,i] )
+            V.ave[J,I] = numpy.maximum( V.ave[J,I], crnr_mean[j,i] )
+            U.hgh[J,I] = numpy.maximum( U.hgh[J,I], crnr_max[j,i] )
+            V.hgh[J,I] = numpy.maximum( V.hgh[J,I], crnr_max[j,i] )
             # Override SW cell values with outer values from coarse cell
-            C.min[J,I] = opp_ridge[j,i] # This will be taller than other minimums but is it lower than opp_cmean ????
+            C.low[J,I] = opp_ridge[j,i] # This will be taller than other minimums but is it lower than opp_cmean ????
             if update_interior_mean_max:
-                C.mean[J,I] = numpy.maximum( C.mean[J,I], opp_cmean[j,i] ) # Avoids changing the mean of the remaining coarse cell
-                C.max[J,I] = numpy.maximum( C.max[J,I], opp_ridge[j,i] )   # Will be taller than cell means?
-                #opp_ridge = 0.5*( U.mean[1::2,1::2] + V.mean[1::2,1::2] ) # Ridge for NE corner
-                U.mean[J,I+1] = opp_ridge[j,i]
-                V.mean[J+1,I] = opp_ridge[j,i]
-                #opp_ridge = numpy.maximum( U.max[1::2,1::2], V.max[1::2,1::2] ) # Ridge for NE corner
-                U.max[J,I+1] = opp_ridge[j,i]
-                V.max[J+1,I] = opp_ridge[j,i]
+                C.ave[J,I] = numpy.maximum( C.ave[J,I], opp_cmean[j,i] ) # Avoids changing the mean of the remaining coarse cell
+                C.hgh[J,I] = numpy.maximum( C.hgh[J,I], opp_ridge[j,i] )   # Will be taller than cell means?
+                #opp_ridge = 0.5*( U.ave[1::2,1::2] + V.ave[1::2,1::2] ) # Ridge for NE corner
+                U.ave[J,I+1] = opp_ridge[j,i]
+                V.ave[J+1,I] = opp_ridge[j,i]
+                #opp_ridge = numpy.maximum( U.hgh[1::2,1::2], V.hgh[1::2,1::2] ) # Ridge for NE corner
+                U.hgh[J,I+1] = opp_ridge[j,i]
+                V.hgh[J+1,I] = opp_ridge[j,i]
     def coarsen(self):
         M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2])
-        M.c_simple.mean = self.c_simple.mean4()
-        M.c_simple.min = self.c_simple.min4()
-        M.c_simple.max = self.c_simple.max4()
-        M.u_simple.mean =self.u_simple.mean2u()
-        M.u_simple.min =self.u_simple.min2u()
-        M.u_simple.max =self.u_simple.max2u()
-        M.v_simple.mean = self.v_simple.mean2v()
-        M.v_simple.min = self.v_simple.min2v()
-        M.v_simple.max = self.v_simple.max2v()
-        M.c_effective.mean = self.c_effective.mean4()
-        M.c_effective.min = self.c_effective.min4()
-        M.c_effective.max = self.c_effective.max4()
-        M.u_effective.mean =self.u_effective.mean2u()
-        M.u_effective.min =self.u_effective.min2u()
-        M.u_effective.max =self.u_effective.max2u()
-        M.v_effective.mean = self.v_effective.mean2v()
-        M.v_effective.min = self.v_effective.min2v()
-        M.v_effective.max = self.v_effective.max2v()
+        M.c_simple.ave = self.c_simple.mean4()
+        M.c_simple.low = self.c_simple.min4()
+        M.c_simple.hgh = self.c_simple.max4()
+        M.u_simple.ave =self.u_simple.mean2u()
+        M.u_simple.low =self.u_simple.min2u()
+        M.u_simple.hgh =self.u_simple.max2u()
+        M.v_simple.ave = self.v_simple.mean2v()
+        M.v_simple.low = self.v_simple.min2v()
+        M.v_simple.hgh = self.v_simple.max2v()
+        M.c_effective.ave = self.c_effective.mean4()
+        M.c_effective.low = self.c_effective.min4()
+        M.c_effective.hgh = self.c_effective.max4()
+        M.u_effective.ave =self.u_effective.mean2u()
+        M.u_effective.low =self.u_effective.min2u()
+        M.u_effective.hgh =self.u_effective.max2u()
+        M.v_effective.ave = self.v_effective.mean2v()
+        M.v_effective.low = self.v_effective.min2v()
+        M.v_effective.hgh = self.v_effective.max2v()
         return M
     def plot(self, axis, thickness=0.2, metric='mean', measure='simple', *args, **kwargs):
         """Plots ThinWalls data."""
@@ -273,9 +273,9 @@ class ThinWalls(GMesh):
         elif measure is 'effective':
             c,u,v = self.c_effective, self.u_effective, self.v_effective
         else: raise Exception('Unknown "measure"')
-        if metric is 'mean': return pcol_elev( c.mean, u.mean, v.mean )
-        elif metric is 'min': return pcol_elev( c.min, u.min, v.min )
-        elif metric is 'max': return pcol_elev( c.max, u.max, v.max )
+        if metric is 'mean': return pcol_elev( c.ave, u.ave, v.ave )
+        elif metric is 'min': return pcol_elev( c.low, u.low, v.low )
+        elif metric is 'max': return pcol_elev( c.hgh, u.hgh, v.hgh )
         else: raise Exception('Unknown "metric"')
     def plot_grid(self, axis, *args, **kwargs):
         """Plots ThinWalls mesh."""
