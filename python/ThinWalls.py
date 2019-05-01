@@ -184,7 +184,6 @@ class ThinWalls(GMesh):
         C.flip(axis=1)
         U.flip(axis=1)
         V.flip(axis=1)
-
     def push_corners_sw(self, update_interior_mean_max=True):
         """Folds out SW corner is it is the highest ridge. Acts only on "effective" values.
 
@@ -228,6 +227,45 @@ class ThinWalls(GMesh):
                 #opp_ridge = numpy.maximum( U.hgh[1::2,1::2], V.hgh[1::2,1::2] ) # Ridge for NE corner
                 U.hgh[J,I+1] = opp_ridge[j,i]
                 V.hgh[J+1,I] = opp_ridge[j,i]
+    def lower_tallest_buttress(self):
+        """Lower tallest barrier to remove buttress"""
+        # Alias lowest
+        C,U,V = self.c_effective.low,self.u_effective.low,self.v_effective.low
+        # Find where the S ridge is higher than other 3
+        oppo3 = numpy.maximum( U[1::2,1::2], numpy.maximum( V[1::2,::2], V[1::2,1::2] ) )
+        j,i = numpy.nonzero( U[::2,1::2]>oppo3 )
+        U[2*j,2*i+1] = oppo3[j,i]
+        # Find where the N ridge is higher than other 3
+        oppo3 = numpy.maximum( U[::2,1::2], numpy.maximum( V[1::2,::2], V[1::2,1::2] ) )
+        j,i = numpy.nonzero( U[1::2,1::2]>oppo3 )
+        U[2*j+1,2*i+1] = oppo3[j,i]
+        # Find where the W ridge is higher than other 3
+        oppo3 = numpy.maximum( V[1::2,1::2], numpy.maximum( U[::2,1::2], U[1::2,1::2] ) )
+        j,i = numpy.nonzero( V[1::2,::2]>oppo3 )
+        V[2*j+1,2*i] = oppo3[j,i]
+        # Find where the E ridge is higher than other 3
+        oppo3 = numpy.maximum( V[1::2,::2], numpy.maximum( U[::2,1::2], U[1::2,1::2] ) )
+        j,i = numpy.nonzero( V[1::2,1::2]>oppo3 )
+        V[2*j+1,2*i+1] = oppo3[j,i]
+        # Alias for averages
+        C,U,V = self.c_effective.ave,self.u_effective.ave,self.v_effective.ave
+        # Find where the S ridge is higher than other 3
+        oppo3 = numpy.maximum( U[1::2,1::2], numpy.maximum( V[1::2,::2], V[1::2,1::2] ) )
+        j,i = numpy.nonzero( U[::2,1::2]>oppo3 )
+        U[2*j,2*i+1] = oppo3[j,i]
+        # Find where the N ridge is higher than other 3
+        oppo3 = numpy.maximum( U[::2,1::2], numpy.maximum( V[1::2,::2], V[1::2,1::2] ) )
+        j,i = numpy.nonzero( U[1::2,1::2]>oppo3 )
+        U[2*j+1,2*i+1] = oppo3[j,i]
+        # Find where the W ridge is higher than other 3
+        oppo3 = numpy.maximum( V[1::2,1::2], numpy.maximum( U[::2,1::2], U[1::2,1::2] ) )
+        j,i = numpy.nonzero( V[1::2,::2]>oppo3 )
+        V[2*j+1,2*i] = oppo3[j,i]
+        # Find where the E ridge is higher than other 3
+        oppo3 = numpy.maximum( V[1::2,::2], numpy.maximum( U[::2,1::2], U[1::2,1::2] ) )
+        j,i = numpy.nonzero( V[1::2,1::2]>oppo3 )
+        V[2*j+1,2*i+1] = oppo3[j,i]
+
     def coarsen(self):
         M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2])
         M.c_simple.ave = self.c_simple.mean4()
@@ -262,7 +300,7 @@ class ThinWalls(GMesh):
             XY[::2,1::2] = xy
             XY[2::2,1:-1:2] = XY[2::2,1:-1:2] + dl*thickness/2
             XY[1::2,1::2] = xy
-            XY[1:-1:2,1:-1:2] = XY[1:-1:2,1:-1:2] + dr*thickness/2 
+            XY[1:-1:2,1:-1:2] = XY[1:-1:2,1:-1:2] + dr*thickness/2
             return XY
         lon = copy_coord(self.lon)
         lat = copy_coord(self.lat)
