@@ -77,6 +77,12 @@ class Stats:
         self.low = numpy.flip(self.low, axis=axis)
         self.ave = numpy.flip(self.ave, axis=axis)
         self.hgh = numpy.flip(self.hgh, axis=axis)
+    def transpose(self):
+        """Transpose data swapping i-j indexes"""
+        self.low = self.low.T
+        self.ave = self.ave.T
+        self.hgh = self.hgh.T
+        #self.shape = self.low.shape
 
 class ThinWalls(GMesh):
     """Container for thin wall topographic data and mesh.
@@ -265,7 +271,74 @@ class ThinWalls(GMesh):
         oppo3 = numpy.maximum( V[1::2,::2], numpy.maximum( U[::2,1::2], U[1::2,1::2] ) )
         j,i = numpy.nonzero( V[1::2,1::2]>oppo3 )
         V[2*j+1,2*i+1] = oppo3[j,i]
-
+    def fold_out_central_ridges(self):
+        """Folded out interior ridges to the sides of the coarse cell"""
+        self.fold_out_central_ridge_s()
+        # Alias
+        C, U, V = self.c_effective, self.u_effective, self.v_effective
+        # Flip in j direction so j=S, i=E
+        C.flip(axis=0)
+        U.flip(axis=0)
+        V.flip(axis=0)
+        self.fold_out_central_ridge_s()
+        # Transpose so j=E, i=S
+        C.transpose()
+        U.transpose()
+        V.transpose()
+        self.u_effective,self.v_effective = self.v_effective,self.u_effective
+        C, U, V = self.c_effective, self.u_effective, self.v_effective
+        self.fold_out_central_ridge_s()
+        # Flip in j direction so j=W, i=S
+        C.flip(axis=0)
+        U.flip(axis=0)
+        V.flip(axis=0)
+        self.fold_out_central_ridge_s()
+        # Undo transformations
+        C.transpose()
+        U.transpose()
+        V.transpose()
+        self.u_effective,self.v_effective = self.v_effective,self.u_effective
+        C, U, V = self.c_effective, self.u_effective, self.v_effective
+        C.flip(axis=0)
+        U.flip(axis=0)
+        V.flip(axis=0)
+        C.flip(axis=1)
+        U.flip(axis=1)
+        V.flip(axis=1)
+    def fold_out_central_ridge_s(self):
+        """An interior east-west ridge is folded out to the southern outer edges if it
+        is the tallest central ridge and the south is the taller half to expand to."""
+        # Alias
+        C,U,V = self.c_effective,self.u_effective,self.v_effective
+        ew_ridge_low = numpy.minimum( V.low[1::2,::2], V.low[1::2,1::2] )
+        #ew_ridge_hgh = numpy.maximum( V.hgh[1::2,::2], V.hgh[1::2,1::2] )
+        #ew_ridge_ave = 0.5*( V.low[1::2,::2] + V.low[1::2,1::2] )
+        ns_ridge_low_min = numpy.minimum( U.low[::2,1::2], U.low[1::2,1::2] )
+        ns_ridge_low_max = numpy.maximum( U.low[::2,1::2], U.low[1::2,1::2] )
+        # Coarse cell index j,i
+        j,i = numpy.nonzero(
+              ( ( ew_ridge_low>ns_ridge_low_min) & (ew_ridge_low>=ns_ridge_low_max ) ) # E-W ridge is the taller ridge
+              & (
+                  ( U.low[::2,1::2] > U.low[1::2,1::2] ) # Southern buttress is taller than north
+                  | (
+                      ( U.low[::2,1::2] >= U.low[1::2,1::2] ) # Southern buttress is equal to the north
+                      & (
+                          ( C.low[::2,::2]+C.low[::2,1::2] > C.low[1::2,::2]+C.low[1::2,1::2] ) | # Southern cells are higher than north on average
+                          ( V.low[:-1:2,::2]+V.low[:-1:2,1::2] > V.low[2::2,::2]+V.low[2::2,1::2] ) # Southern edges are higher than north on average
+                ) ) ) )
+        J,I = 2*j,2*i
+        # Outer edges of southern half
+        U.low[J,I] = numpy.maximum( U.low[J,I], ew_ridge_low[j,i] )
+        V.low[J,I] = numpy.maximum( V.low[J,I], ew_ridge_low[j,i] )
+        V.low[J,I+1] = numpy.maximum( V.low[J,I+1], ew_ridge_low[j,i] )
+        U.low[J,I+2] = numpy.maximum( U.low[J,I+2], ew_ridge_low[j,i] )
+        # Replace E-W ridge
+        V.low[J+1,I] = ns_ridge_low_min[j,i]
+        V.low[J+1,I+1] = ns_ridge_low_min[j,i]
+        # Southern cells
+        C.low[J,I] = ns_ridge_low_min[j,i]
+        C.low[J,I+1] = ns_ridge_low_min[j,i]
+        U.low[J,I+1] = ns_ridge_low_min[j,i]
     def coarsen(self):
         M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2])
         M.c_simple.ave = self.c_simple.mean4()
