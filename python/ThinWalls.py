@@ -94,6 +94,9 @@ class ThinWalls(GMesh):
         self.c_simple = Stats(self.shape)
         self.u_simple = Stats(self.shapeu)
         self.v_simple = Stats(self.shapev)
+        self.c_effective = Stats(self.shape)
+        self.u_effective = Stats(self.shapeu)
+        self.v_effective = Stats(self.shapev)
     def __copy__(self):
         copy = ThinWalls(shape=self.shape, lon=self.lon, lat=self.lat)
         copy.c_simple = self.c_simple.copy()
@@ -146,6 +149,80 @@ class ThinWalls(GMesh):
         tmp[0,:] = self.c_simple.mean[0,:]
         tmp[-1,:] = self.c_simple.mean[-1,:]
         self.v_simple.set_equal( tmp )
+    def push_corners(self, update_interior_mean_max=True):
+        """Folds out tallest corners. Acts only on "effective" values.
+
+        A convex corner within a coarse grid cell can be made into a
+        concave corner without changing connectivity across the major
+        parts of the cell. The cross-corner connection for the minor
+        part of the cell is eliminated."""
+
+        self.push_corners_sw(update_interior_mean_max=update_interior_mean_max)
+        # Alias
+        C, U, V = self.c_effective, self.u_effective, self.v_effective
+        # Flip in j direction
+        C.min, C.mean, C.max = numpy.flip( C.min, axis=0 ), numpy.flip( C.mean, axis=0 ), numpy.flip( C.max, axis=0 )
+        U.min, U.mean, U.max = numpy.flip( U.min, axis=0 ), numpy.flip( U.mean, axis=0 ), numpy.flip( U.max, axis=0 )
+        V.min, V.mean, V.max = numpy.flip( V.min, axis=0 ), numpy.flip( V.mean, axis=0 ), numpy.flip( V.max, axis=0 )
+        self.push_corners_sw(update_interior_mean_max=update_interior_mean_max) # Push NW
+        # Flip in i direction
+        C.min, C.mean, C.max = numpy.flip( C.min, axis=1 ), numpy.flip( C.mean, axis=1 ), numpy.flip( C.max, axis=1 )
+        U.min, U.mean, U.max = numpy.flip( U.min, axis=1 ), numpy.flip( U.mean, axis=1 ), numpy.flip( U.max, axis=1 )
+        V.min, V.mean, V.max = numpy.flip( V.min, axis=1 ), numpy.flip( V.mean, axis=1 ), numpy.flip( V.max, axis=1 )
+        self.push_corners_sw(update_interior_mean_max=update_interior_mean_max) # Push NE
+        # Flip in j direction
+        C.min, C.mean, C.max = numpy.flip( C.min, axis=0 ), numpy.flip( C.mean, axis=0 ), numpy.flip( C.max, axis=0 )
+        U.min, U.mean, U.max = numpy.flip( U.min, axis=0 ), numpy.flip( U.mean, axis=0 ), numpy.flip( U.max, axis=0 )
+        V.min, V.mean, V.max = numpy.flip( V.min, axis=0 ), numpy.flip( V.mean, axis=0 ), numpy.flip( V.max, axis=0 )
+        self.push_corners_sw(update_interior_mean_max=update_interior_mean_max) # Push SE
+        # Flip in i direction
+        C.min, C.mean, C.max = numpy.flip( C.min, axis=1 ), numpy.flip( C.mean, axis=1 ), numpy.flip( C.max, axis=1 )
+        U.min, U.mean, U.max = numpy.flip( U.min, axis=1 ), numpy.flip( U.mean, axis=1 ), numpy.flip( U.max, axis=1 )
+        V.min, V.mean, V.max = numpy.flip( V.min, axis=1 ), numpy.flip( V.mean, axis=1 ), numpy.flip( V.max, axis=1 )
+
+    def push_corners_sw(self, update_interior_mean_max=True):
+        """Folds out tallest corners. Acts only on "effective" values.
+
+        A convex corner within a coarse grid cell can be made into a
+        concave corner without changing connectivity across the major
+        parts of the cell. The cross-corner connection for the minor
+        part of the cell is eliminated."""
+        # Alias
+        C,U,V = self.c_effective,self.u_effective,self.v_effective
+        # Inner SW corner
+        crnr_min = numpy.minimum( U.min[::2,1::2], V.min[1::2,::2] )    # Min or "sill" for SW corner
+        crnr_mean = 0.5*( U.mean[::2,1::2] + V.mean[1::2,::2] )         # Mean for SW corner
+        crnr_max = numpy.maximum( U.max[::2,1::2], V.max[1::2,::2] )    # Max for SW corner
+        # Values for the coarse cell outside of the SW corner
+        opp_ridge = numpy.maximum( U.min[1::2,1::2], V.min[1::2,1::2] ) # Ridge for NE corner
+        opp_cmean = ( ( C.mean[::2,1::2] + C.mean[1::2,::2] ) + C.mean[1::2,1::2] )/3 # Mean of outer cells
+        j,i = numpy.nonzero( crnr_min>opp_ridge )  # Find where the SW corner has the highest sill
+        if len(i)>0:
+            J,I = 2*j,2*i
+            # Replace inner minimum values with ridge value
+            # - set inner SW corner sill to peak of the NW ridge to avoid introducing a new deep diagonal
+            #   connection across the interior of the coarse cell
+            U.min[J,I+1] = opp_ridge[j,i]
+            V.min[J+1,I] = opp_ridge[j,i]
+            # ????? No replace inner mean and max ???? Not used?
+            # Override outer SW edge values with SW corner inner values
+            U.min[J,I] = numpy.maximum( U.min[J,I], crnr_min[j,i] )
+            V.min[J,I] = numpy.maximum( V.min[J,I], crnr_min[j,i] )
+            U.mean[J,I] = numpy.maximum( U.mean[J,I], crnr_mean[j,i] )
+            V.mean[J,I] = numpy.maximum( V.mean[J,I], crnr_mean[j,i] )
+            U.max[J,I] = numpy.maximum( U.max[J,I], crnr_max[j,i] )
+            V.max[J,I] = numpy.maximum( V.max[J,I], crnr_max[j,i] )
+            # Override SW cell values with outer values from coarse cell
+            C.min[J,I] = opp_ridge[j,i] # This will be taller than other minimums but is it lower than opp_cmean ????
+            if update_interior_mean_max:
+                C.mean[J,I] = numpy.maximum( C.mean[J,I], opp_cmean[j,i] ) # Avoids changing the mean of the remaining coarse cell
+                C.max[J,I] = numpy.maximum( C.max[J,I], opp_ridge[j,i] )   # Will be taller than cell means?
+                #opp_ridge = 0.5*( U.mean[1::2,1::2] + V.mean[1::2,1::2] ) # Ridge for NE corner
+                U.mean[J,I+1] = opp_ridge[j,i]
+                V.mean[J+1,I] = opp_ridge[j,i]
+                #opp_ridge = numpy.maximum( U.max[1::2,1::2], V.max[1::2,1::2] ) # Ridge for NE corner
+                U.max[J,I+1] = opp_ridge[j,i]
+                V.max[J+1,I] = opp_ridge[j,i]
     def coarsen(self):
         M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2])
         M.c_simple.mean = self.c_simple.mean4()
@@ -157,6 +234,15 @@ class ThinWalls(GMesh):
         M.v_simple.mean = self.v_simple.mean2v()
         M.v_simple.min = self.v_simple.min2v()
         M.v_simple.max = self.v_simple.max2v()
+        M.c_effective.mean = self.c_effective.mean4()
+        M.c_effective.min = self.c_effective.min4()
+        M.c_effective.max = self.c_effective.max4()
+        M.u_effective.mean =self.u_effective.mean2u()
+        M.u_effective.min =self.u_effective.min2u()
+        M.u_effective.max =self.u_effective.max2u()
+        M.v_effective.mean = self.v_effective.mean2v()
+        M.v_effective.min = self.v_effective.min2v()
+        M.v_effective.max = self.v_effective.max2v()
         return M
     def plot(self, axis, thickness=0.2, metric='mean', measure='simple', *args, **kwargs):
         """Plots ThinWalls data."""
