@@ -339,6 +339,123 @@ class ThinWalls(GMesh):
         C.low[J,I] = ns_ridge_low_min[j,i]
         C.low[J,I+1] = ns_ridge_low_min[j,i]
         U.low[J,I+1] = ns_ridge_low_min[j,i]
+    def invert_exterior_corners(self):
+        """The deepest exterior corner is expanded to fill the coarse cell"""
+        # Alias
+        C,U,V = self.c_effective,self.u_effective,self.v_effective
+        # Exterior deep corners
+        d_sw = numpy.maximum( U.low[::2,:-1:2], V.low[:-1:2,::2] )
+        d_se = numpy.maximum( U.low[::2,2::2], V.low[:-1:2,1::2] )
+        d_nw = numpy.maximum( U.low[1::2,:-1:2], V.low[2::2,::2] )
+        d_ne = numpy.maximum( U.low[1::2,2::2], V.low[2::2,1::2] )
+        oppo = numpy.minimum( d_ne, numpy.minimum( d_nw, d_se ) )
+        # Interior sills
+        s_sw = numpy.minimum( U.low[::2,1::2], V.low[1::2,::2] )
+        s_se = numpy.minimum( U.low[::2,1::2], V.low[1::2,1::2] )
+        s_nw = numpy.minimum( U.low[1::2,1::2], V.low[1::2,::2] )
+        s_ne = numpy.minimum( U.low[1::2,1::2], V.low[1::2,1::2] )
+        # Diagonal ridges from corners
+        r_sw = numpy.maximum( U.low[::2,1::2], V.low[1::2,::2] )
+        r_se = numpy.maximum( U.low[::2,1::2], V.low[1::2,1::2] )
+        r_nw = numpy.maximum( U.low[1::2,1::2], V.low[1::2,::2] )
+        r_ne = numpy.maximum( U.low[1::2,1::2], V.low[1::2,1::2] )
+
+        # SW conditions
+        oppo = numpy.minimum( d_ne, numpy.minimum( d_nw, d_se ) )
+        swj,swi = numpy.nonzero( (d_sw < oppo) & (d_sw < s_sw) ) # SW is deepest corner
+
+        # SE conditions
+        oppo = numpy.minimum( d_nw, numpy.minimum( d_ne, d_sw ) )
+        sej,sei = numpy.nonzero( (d_se < oppo) & (d_se < s_se) ) # SE is deepest corner
+
+        # NE conditions
+        oppo = numpy.minimum( d_sw, numpy.minimum( d_se, d_nw ) )
+        nej,nei = numpy.nonzero( (d_ne < oppo) & (d_ne < s_ne) ) # NE is deepest corner
+
+        # NW conditions
+        oppo = numpy.minimum( d_se, numpy.minimum( d_sw, d_ne ) )
+        nwj,nwi = numpy.nonzero( (d_nw < oppo) & (d_nw < s_nw) ) # NW is deepest corner
+
+        # Apply SW
+        j,i,J,I=swj,swi,2*swj,2*swi
+        # Deepen interior walls and cells
+        U.low[J,I+1] = numpy.minimum( U.low[J,I+1], d_sw[j,i] )
+        U.low[J+1,I+1] = numpy.minimum( U.low[J+1,I+1], d_sw[j,i] )
+        V.low[J+1,I] = numpy.minimum( V.low[J+1,I], d_sw[j,i] )
+        V.low[J+1,I+1] = numpy.minimum( V.low[J+1,I+1], d_sw[j,i] )
+        C.low[J,I] = numpy.minimum( C.low[J,I], d_sw[j,i] )
+        C.low[J,I+1] = numpy.minimum( C.low[J,I+1], d_sw[j,i] )
+        C.low[J+1,I] = numpy.minimum( C.low[J+1,I], d_sw[j,i] )
+        C.low[J+1,I+1] = numpy.minimum( C.low[J+1,I+1], d_sw[j,i] )
+        # Outer edges
+        new_ridge = numpy.minimum( r_se, r_nw )
+        V.low[J,I+1] = numpy.maximum( V.low[J,I+1], r_se[j,i] )
+        U.low[J,I+2] = numpy.maximum( U.low[J,I+2], r_se[j,i] )
+        U.low[J+1,I+2] = numpy.maximum( U.low[J+1,I+2], new_ridge[j,i] )
+        V.low[J+2,I+1] = numpy.maximum( V.low[J+2,I+1], new_ridge[j,i] )
+        V.low[J+2,I] = numpy.maximum( V.low[J+2,I], r_nw[j,i] )
+        U.low[J+1,I] = numpy.maximum( U.low[J+1,I], r_nw[j,i] )
+
+        # Apply SE
+        j,i,J,I=sej,sei,2*sej,2*sei
+        # Deepen interior walls and cells
+        U.low[J,I+1] = numpy.minimum( U.low[J,I+1], d_se[j,i] )
+        U.low[J+1,I+1] = numpy.minimum( U.low[J+1,I+1], d_se[j,i] )
+        V.low[J+1,I] = numpy.minimum( V.low[J+1,I], d_se[j,i] )
+        V.low[J+1,I+1] = numpy.minimum( V.low[J+1,I+1], d_se[j,i] )
+        C.low[J,I] = numpy.minimum( C.low[J,I], d_se[j,i] )
+        C.low[J,I+1] = numpy.minimum( C.low[J,I+1], d_se[j,i] )
+        C.low[J+1,I] = numpy.minimum( C.low[J+1,I], d_se[j,i] )
+        C.low[J+1,I+1] = numpy.minimum( C.low[J+1,I+1], d_se[j,i] )
+        # Outer edges
+        new_ridge = numpy.minimum( r_sw, r_ne )
+        V.low[J,I] = numpy.maximum( V.low[J,I], r_sw[j,i] )
+        U.low[J,I] = numpy.maximum( U.low[J,I], r_sw[j,i] )
+        U.low[J+1,I] = numpy.maximum( U.low[J+1,I], new_ridge[j,i] )
+        V.low[J+2,I] = numpy.maximum( V.low[J+2,I], new_ridge[j,i] )
+        V.low[J+2,I+1] = numpy.maximum( V.low[J+2,I+1], r_ne[j,i] )
+        U.low[J+1,I+2] = numpy.maximum( U.low[J+1,I+2], r_ne[j,i] )
+
+        # Apply NW
+        j,i,J,I=nwj,nwi,2*nwj,2*nwi
+        # Deepen interior walls and cells
+        U.low[J,I+1] = numpy.minimum( U.low[J,I+1], d_nw[j,i] )
+        U.low[J+1,I+1] = numpy.minimum( U.low[J+1,I+1], d_nw[j,i] )
+        V.low[J+1,I] = numpy.minimum( V.low[J+1,I], d_nw[j,i] )
+        V.low[J+1,I+1] = numpy.minimum( V.low[J+1,I+1], d_nw[j,i] )
+        C.low[J,I] = numpy.minimum( C.low[J,I], d_nw[j,i] )
+        C.low[J,I+1] = numpy.minimum( C.low[J,I+1], d_nw[j,i] )
+        C.low[J+1,I] = numpy.minimum( C.low[J+1,I], d_nw[j,i] )
+        C.low[J+1,I+1] = numpy.minimum( C.low[J+1,I+1], d_nw[j,i] )
+        # Outer edges
+        new_ridge = numpy.minimum( r_ne, r_sw )
+        V.low[J+2,I+1] = numpy.maximum( V.low[J+1,I+1], r_ne[j,i] )
+        U.low[J+1,I+2] = numpy.maximum( U.low[J+1,I+2], r_ne[j,i] )
+        U.low[J,I+2] = numpy.maximum( U.low[J,I+2], new_ridge[j,i] )
+        V.low[J,I+1] = numpy.maximum( V.low[J,I+1], new_ridge[j,i] )
+        V.low[J,I] = numpy.maximum( V.low[J,I], r_sw[j,i] )
+        U.low[J,I] = numpy.maximum( U.low[J,I], r_sw[j,i] )
+
+        # Apply NE
+        j,i,J,I=nej,nei,2*nej,2*nei
+        # Deepen interior walls and cells
+        U.low[J,I+1] = numpy.minimum( U.low[J,I+1], d_ne[j,i] )
+        U.low[J+1,I+1] = numpy.minimum( U.low[J+1,I+1], d_ne[j,i] )
+        V.low[J+1,I] = numpy.minimum( V.low[J+1,I], d_ne[j,i] )
+        V.low[J+1,I+1] = numpy.minimum( V.low[J+1,I+1], d_ne[j,i] )
+        C.low[J,I] = numpy.minimum( C.low[J,I], d_ne[j,i] )
+        C.low[J,I+1] = numpy.minimum( C.low[J,I+1], d_ne[j,i] )
+        C.low[J+1,I] = numpy.minimum( C.low[J+1,I], d_ne[j,i] )
+        C.low[J+1,I+1] = numpy.minimum( C.low[J+1,I+1], d_ne[j,i] )
+        # Outer edges
+        new_ridge = numpy.minimum( r_nw, r_se )
+        V.low[J+2,I] = numpy.maximum( V.low[J+1,I], r_nw[j,i] )
+        U.low[J+1,I] = numpy.maximum( U.low[J+1,I], r_nw[j,i] )
+        U.low[J,I] = numpy.maximum( U.low[J,I], new_ridge[j,i] )
+        V.low[J,I] = numpy.maximum( V.low[J,I], new_ridge[j,i] )
+        V.low[J,I+1] = numpy.maximum( V.low[J,I+1], r_se[j,i] )
+        U.low[J,I+2] = numpy.maximum( U.low[J,I+2], r_se[j,i] )
+
     def coarsen(self):
         M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2])
         M.c_simple.ave = self.c_simple.mean4()
