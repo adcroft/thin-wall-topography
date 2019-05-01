@@ -72,6 +72,11 @@ class Stats:
     def max2v(self):
         """Return 2d/2-point maximum on v-edges"""
         return numpy.maximum( self.hgh[::2,::2], self.hgh[::2,1::2] )
+    def flip(self, axis):
+        """Flip the data along the given axis"""
+        self.low = numpy.flip(self.low, axis=axis)
+        self.ave = numpy.flip(self.ave, axis=axis)
+        self.hgh = numpy.flip(self.hgh, axis=axis)
 
 class ThinWalls(GMesh):
     """Container for thin wall topographic data and mesh.
@@ -161,27 +166,27 @@ class ThinWalls(GMesh):
         # Alias
         C, U, V = self.c_effective, self.u_effective, self.v_effective
         # Flip in j direction
-        C.low, C.ave, C.hgh = numpy.flip( C.low, axis=0 ), numpy.flip( C.ave, axis=0 ), numpy.flip( C.hgh, axis=0 )
-        U.low, U.ave, U.hgh = numpy.flip( U.low, axis=0 ), numpy.flip( U.ave, axis=0 ), numpy.flip( U.hgh, axis=0 )
-        V.low, V.ave, V.hgh = numpy.flip( V.low, axis=0 ), numpy.flip( V.ave, axis=0 ), numpy.flip( V.hgh, axis=0 )
+        C.flip(axis=0)
+        U.flip(axis=0)
+        V.flip(axis=0)
         self.push_corners_sw(update_interior_mean_max=update_interior_mean_max) # Push NW
         # Flip in i direction
-        C.low, C.ave, C.hgh = numpy.flip( C.low, axis=1 ), numpy.flip( C.ave, axis=1 ), numpy.flip( C.hgh, axis=1 )
-        U.low, U.ave, U.hgh = numpy.flip( U.low, axis=1 ), numpy.flip( U.ave, axis=1 ), numpy.flip( U.hgh, axis=1 )
-        V.low, V.ave, V.hgh = numpy.flip( V.low, axis=1 ), numpy.flip( V.ave, axis=1 ), numpy.flip( V.hgh, axis=1 )
+        C.flip(axis=1)
+        U.flip(axis=1)
+        V.flip(axis=1)
         self.push_corners_sw(update_interior_mean_max=update_interior_mean_max) # Push NE
         # Flip in j direction
-        C.low, C.ave, C.hgh = numpy.flip( C.low, axis=0 ), numpy.flip( C.ave, axis=0 ), numpy.flip( C.hgh, axis=0 )
-        U.low, U.ave, U.hgh = numpy.flip( U.low, axis=0 ), numpy.flip( U.ave, axis=0 ), numpy.flip( U.hgh, axis=0 )
-        V.low, V.ave, V.hgh = numpy.flip( V.low, axis=0 ), numpy.flip( V.ave, axis=0 ), numpy.flip( V.hgh, axis=0 )
+        C.flip(axis=0)
+        U.flip(axis=0)
+        V.flip(axis=0)
         self.push_corners_sw(update_interior_mean_max=update_interior_mean_max) # Push SE
         # Flip in i direction
-        C.low, C.ave, C.hgh = numpy.flip( C.low, axis=1 ), numpy.flip( C.ave, axis=1 ), numpy.flip( C.hgh, axis=1 )
-        U.low, U.ave, U.hgh = numpy.flip( U.low, axis=1 ), numpy.flip( U.ave, axis=1 ), numpy.flip( U.hgh, axis=1 )
-        V.low, V.ave, V.hgh = numpy.flip( V.low, axis=1 ), numpy.flip( V.ave, axis=1 ), numpy.flip( V.hgh, axis=1 )
+        C.flip(axis=1)
+        U.flip(axis=1)
+        V.flip(axis=1)
 
     def push_corners_sw(self, update_interior_mean_max=True):
-        """Folds out tallest corners. Acts only on "effective" values.
+        """Folds out SW corner is it is the highest ridge. Acts only on "effective" values.
 
         A convex corner within a coarse grid cell can be made into a
         concave corner without changing connectivity across the major
