@@ -38,7 +38,7 @@ def undo_break_array_to_blocks(a,xb=4,yb=1):
         raise Exception('This rotuine can only make 2x2 blocks!')
         ##Niki: Implement a better algo and lift this restriction
 
-def write_topog(h,fnam=None,format='NETCDF3_CLASSIC',description=None,history=None,source=None,no_changing_meta=None):
+def write_topog(h,h2,fnam=None,format='NETCDF3_CLASSIC',description=None,history=None,source=None,no_changing_meta=None):
     import netCDF4 as nc
 
     if fnam is None:
@@ -55,6 +55,9 @@ def write_topog(h,fnam=None,format='NETCDF3_CLASSIC',description=None,history=No
     height=fout.createVariable('height','f8',('ny','nx'))
     height.units='meters'
     height[:]=h
+    height2=fout.createVariable('h2','f8',('ny','nx'))
+    height2.units='meters^2'
+    height2[:]=h2
     #global attributes
     if(not no_changing_meta):
     	fout.history = history
@@ -124,14 +127,14 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs):
     # Coarsen back to the original taget grid
     print("Coarsening back to the original taget grid ...")
     for i in reversed(range(1,len(Glist))):   # 1, makes it stop at element 1 rather than 0
-        Glist[i].coarsenby2_v0(Glist[i-1])
+        Glist[i].coarsenby2(Glist[i-1])
 
     
     #print("Writing ...")
     #filename = 'topog_refsamp_BP.nc'+str(b) 
     #write_topog(Glist[0].height,fnam=filename,no_changing_meta=True)
     #print("haigts shape:", lons[b].shape,Hlist[b].shape)
-    return Glist[0].height
+    return Glist[0].height,Glist[0].h2
 
 
 def main(argv):
@@ -187,14 +190,18 @@ def main(argv):
 
     #We must loop over the 4 partitions
     Hlist=[]
+    H2list=[]
     for part in range(0,xb):
         lon = lons[part]
         lat = lats[part]
-        Hlist.append(do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs))
+        h,h2 = do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs)
+        Hlist.append(h)
+        H2list.append(h2)
 
     height_refsamp = undo_break_array_to_blocks(Hlist,xb,yb)
+    h2_refsamp = undo_break_array_to_blocks(H2list,xb,yb)
     filename = 'topog_refsamp_BP.nc' 
-    write_topog(height_refsamp,fnam=filename,no_changing_meta=True)
+    write_topog(height_refsamp,h2_refsamp,fnam=filename,no_changing_meta=True)
     
     plt.figure(figsize=(10,10))
     ax = plt.subplot(111, projection=cartopy.crs.NearsidePerspective(central_latitude=90))
