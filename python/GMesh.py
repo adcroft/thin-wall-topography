@@ -204,11 +204,24 @@ class GMesh:
                                            + self.height[1::2,0:-1:2]
                                            + self.height[0:-1:2,1::2])
 
-        coarser_mesh.h2 = np.zeros(coarser_mesh.height.shape)
-        coarser_mesh.h2[:-1,:-1] =((coarser_mesh.height[:-1,:-1] - self.height[:-1:2,:-1:2])**2 
-                                 + (coarser_mesh.height[:-1,:-1] - self.height[1::2,1::2]  )**2 
-                                 + (coarser_mesh.height[:-1,:-1] - self.height[1::2,0:-1:2])**2 
-                                 + (coarser_mesh.height[:-1,:-1] - self.height[0:-1:2,1::2])**2) / 4 #Or 3 ??
+        coarser_mesh.h_std = np.zeros(coarser_mesh.height.shape)
+        coarser_mesh.h_std[:-1,:-1] =((coarser_mesh.height[:-1,:-1] - self.height[:-1:2,:-1:2])**2 
+                                    + (coarser_mesh.height[:-1,:-1] - self.height[1::2,1::2]  )**2 
+                                    + (coarser_mesh.height[:-1,:-1] - self.height[1::2,0:-1:2])**2 
+                                    + (coarser_mesh.height[:-1,:-1] - self.height[0:-1:2,1::2])**2) / 4 #Or 3 ??
+        coarser_mesh.h_std=np.sqrt(coarser_mesh.h_std)
+
+        coarser_mesh.h_min = np.copy(self.height[::2,::2])
+        coarser_mesh.h_min[:-1,:-1] = np.minimum(self.height[:-1:2,:-1:2],self.height[1::2,1::2])
+        coarser_mesh.h_min[:-1,:-1] = np.minimum(coarser_mesh.h_min[:-1,:-1],self.height[1::2,0:-1:2])
+        coarser_mesh.h_min[:-1,:-1] = np.minimum(coarser_mesh.h_min[:-1,:-1],self.height[0:-1:2,1::2])
+
+        coarser_mesh.h_max = np.copy(self.height[::2,::2])
+        coarser_mesh.h_max[:-1,:-1] = np.maximum(self.height[:-1:2,:-1:2],self.height[1::2,1::2])
+        coarser_mesh.h_max[:-1,:-1] = np.maximum(coarser_mesh.h_max[:-1,:-1],self.height[1::2,0:-1:2])
+        coarser_mesh.h_max[:-1,:-1] = np.maximum(coarser_mesh.h_max[:-1,:-1],self.height[0:-1:2,1::2])
+       
+        
 
     def find_nn_uniform_source(self, lon, lat):
         """Returns the i,j arrays for the indexes of the nearest neighbor point to grid (lon,lat)"""
@@ -219,8 +232,14 @@ class GMesh:
         sni,snj =lon.shape[0],lat.shape[0] # Shape of source
         # Spacing on uniform mesh
         dellon, dellat = (lon[-1]-lon[0])/(sni-1), (lat[-1]-lat[0])/(snj-1)
-        assert self.lat.max()<=lat.max()+0.5*dellat, 'Mesh has latitudes above range of regular grid '+str(self.lat.max())+' '+str(lat.max()+0.5*dellat)
-        assert self.lat.min()>=lat.min()-0.5*dellat, 'Mesh has latitudes below range of regular grid '+str(self.lat.min())+' '+str(lat.min()-0.5*dellat)
+#original
+#        assert self.lat.max()<=lat.max()+0.5*dellat, 'Mesh has latitudes above range of regular grid '+str(self.lat.max())+' '+str(lat.max()+0.5*dellat)
+#        assert self.lat.min()>=lat.min()-0.5*dellat, 'Mesh has latitudes below range of regular grid '+str(self.lat.min())+' '+str(lat.min()-0.5*dellat)
+#changed
+#        assert self.lat.max()>=lat.max()-0.5*dellat, 'Source has latitudes above range of target mesh '+str(self.lat.max())+' '+str(lat.max()-0.5*dellat)
+#        assert self.lat.min()<=lat.min()+0.5*dellat, 'Source has latitudes below range of target mesh '+str(self.lat.min())+' '+str(lat.min()+0.5*dellat)
+#neither works for bipole
+
         if abs( (lon[-1]-lon[0])-360 )<=360.*np.finfo( lon.dtype ).eps:
             sni-=1 # Account for repeated longitude
         # Nearest integer (the upper one if equidistant)
@@ -276,6 +295,8 @@ class GMesh:
         i,j = self.find_nn_uniform_source(xs,ys)
         self.height = np.zeros(self.lon.shape)
         self.height[:,:] = zs[j[:],i[:]]
-        self.h2 = np.zeros(self.lon.shape)
+        self.h_std = np.zeros(self.lon.shape)
+        self.h_min = np.zeros(self.lon.shape)
+        self.h_max = np.zeros(self.lon.shape)
         return
 
