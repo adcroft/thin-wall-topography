@@ -103,6 +103,11 @@ class GMesh:
 
         self.rfl = rfl #refining level
 
+    def __copy__(self):
+        return GMesh(shape = self.shape, lon=self.lon, lat=self.lat, area=self.area)
+    def copy(self):
+        """Returns new instance with copied values"""
+        return self.__copy__()
     def __repr__(self):
         return '<GMesh nj:%i ni:%i shape:(%i,%i)>'%(self.nj,self.ni,self.shape[0],self.shape[1])
     def __getitem__(self, key):

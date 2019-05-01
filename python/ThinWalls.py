@@ -94,6 +94,17 @@ class ThinWalls(GMesh):
         self.c_simple = Stats(self.shape)
         self.u_simple = Stats(self.shapeu)
         self.v_simple = Stats(self.shapev)
+    def __copy__(self):
+        copy = ThinWalls(shape=self.shape, lon=self.lon, lat=self.lat)
+        copy.c_simple = self.c_simple.copy()
+        copy.u_simple = self.u_simple.copy()
+        copy.v_simple = self.v_simple.copy()
+        copy.c_effective = self.c_effective.copy()
+        copy.u_effective = self.u_effective.copy()
+        copy.v_effective = self.v_effective.copy()
+    def copy(self):
+        """Returns new instance with copied values"""
+        return self.__copy__()
     def refine(self):
         """Returns new ThinWalls instance with twice the resolution."""
         M = super().refineby2()
