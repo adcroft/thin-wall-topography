@@ -455,6 +455,53 @@ class ThinWalls(GMesh):
         V.low[J,I] = numpy.maximum( V.low[J,I], new_ridge[j,i] )
         V.low[J,I+1] = numpy.maximum( V.low[J,I+1], r_se[j,i] )
         U.low[J,I+2] = numpy.maximum( U.low[J,I+2], r_se[j,i] )
+    def diagnose_NS_pathway(self):
+        """Returns deepest NS pathway"""
+        se_to_ne, se_to_nw, sw_to_ne, sw_to_nw= self.diagnose_NS_pathways()
+        sw= numpy.minimum( sw_to_ne, sw_to_nw)
+        se= numpy.minimum( se_to_ne, se_to_nw)
+        return numpy.minimum( sw, se)
+    def diagnose_NS_pathways(self):
+        """Returns NS deep pathways"""
+        # Alias
+        C,U,V = self.c_effective.low,self.u_effective.low,self.v_effective.low
+
+        # Cell to immediate north-south exit
+        ne_exit = V[2::2,1::2]
+        nw_exit = V[2::2,::2]
+        se_exit = V[0:-1:2,1::2]
+        sw_exit = V[0:-1:2,::2]
+        # Single gate cell to cell
+        se_to_ne_1 = V[1::2,1::2]
+        sw_to_nw_1 = V[1::2,::2]
+        nw_to_ne_1 = U[1::2,1::2]
+        ne_to_nw_1 = nw_to_ne_1
+        sw_to_se_1 = U[::2,1::2]
+        se_to_sw_1 = sw_to_se_1
+        # Two gates cell to cell
+        a = numpy.maximum( sw_to_se_1, se_to_ne_1 )
+        b = numpy.maximum( sw_to_nw_1, nw_to_ne_1 )
+        sw_to_ne = numpy.minimum( a, b )
+        a = numpy.maximum( se_to_sw_1, sw_to_nw_1 )
+        b = numpy.maximum( se_to_ne_1, ne_to_nw_1 )
+        se_to_nw = numpy.minimum( a, b )
+        # Both paths from south cells to north cells
+        se_to_ne = numpy.maximum( se_to_nw, nw_to_ne_1 )
+        se_to_ne = numpy.minimum( se_to_ne_1, se_to_ne )
+        sw_to_nw = numpy.maximum( sw_to_ne, ne_to_nw_1 )
+        sw_to_nw = numpy.minimum( sw_to_nw_1, sw_to_nw )
+        # South cells to north exits (replaces previous definitions)
+        se_to_ne = numpy.maximum( se_to_ne, ne_exit )
+        se_to_nw = numpy.maximum( se_to_nw, nw_exit )
+        sw_to_ne = numpy.maximum( sw_to_ne, ne_exit )
+        sw_to_nw = numpy.maximum( sw_to_nw, nw_exit )
+        # Entrance to entrance (replaces previous definitions)
+        se_to_ne = numpy.maximum( se_exit, se_to_ne )
+        se_to_nw = numpy.maximum( se_exit, se_to_nw )
+        sw_to_ne = numpy.maximum( sw_exit, sw_to_ne )
+        sw_to_nw = numpy.maximum( sw_exit, sw_to_nw )
+
+        return se_to_ne, se_to_nw, sw_to_ne, sw_to_nw
 
     def coarsen(self):
         M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2])
