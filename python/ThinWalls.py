@@ -82,7 +82,7 @@ class Stats:
         self.low = self.low.T
         self.ave = self.ave.T
         self.hgh = self.hgh.T
-        #self.shape = self.low.shape
+        self.shape = self.low.shape
 
 class ThinWalls(GMesh):
     """Container for thin wall topographic data and mesh.
@@ -119,6 +119,20 @@ class ThinWalls(GMesh):
     def copy(self):
         """Returns new instance with copied values"""
         return self.__copy__()
+    def transpose(self):
+        """Transpose data swapping i-j indexes"""
+        super().transpose()
+        self.c_simple.transpose()
+        self.u_simple.transpose()
+        self.v_simple.transpose()
+        self.u_simple, self.v_simple = self.v_simple, self.u_simple
+        self.c_effective.transpose()
+        self.u_effective.transpose()
+        self.v_effective.transpose()
+        self.u_effective, self.v_effective = self.v_effective, self.u_effective
+        self.shape = self.c_effective.shape
+        self.shapeu = self.u_effective.shape
+        self.shapev = self.v_effective.shape
     def refine(self):
         """Returns new ThinWalls instance with twice the resolution."""
         M = super().refineby2()
@@ -455,6 +469,22 @@ class ThinWalls(GMesh):
         V.low[J,I] = numpy.maximum( V.low[J,I], new_ridge[j,i] )
         V.low[J,I+1] = numpy.maximum( V.low[J,I+1], r_se[j,i] )
         U.low[J,I+2] = numpy.maximum( U.low[J,I+2], r_se[j,i] )
+    def diagnose_EW_pathway(self):
+        """Returns deepest EW pathway"""
+        wn_to_en, wn_to_es, ws_to_en, ws_to_es = self.diagnose_EW_pathways()
+        wn = numpy.minimum( wn_to_en, wn_to_es)
+        ws = numpy.minimum( ws_to_en, ws_to_es)
+        return numpy.minimum( wn, ws)
+    def diagnose_EW_pathways(self):
+        """Returns deepest EW pathway"""
+        self.u_effective.transpose()
+        self.v_effective.transpose()
+        self.u_effective,self.v_effective = self.v_effective,self.u_effective
+        wn_to_en, wn_to_es, ws_to_en, ws_to_es = self.diagnose_NS_pathways()
+        self.u_effective.transpose()
+        self.v_effective.transpose()
+        self.u_effective,self.v_effective = self.v_effective,self.u_effective
+        return wn_to_en.T, wn_to_es.T, ws_to_en.T, ws_to_es.T
     def diagnose_NS_pathway(self):
         """Returns deepest NS pathway"""
         se_to_ne, se_to_nw, sw_to_ne, sw_to_nw = self.diagnose_NS_pathways()
