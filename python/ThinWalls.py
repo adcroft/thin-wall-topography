@@ -532,6 +532,30 @@ class ThinWalls(GMesh):
         sw_to_nw = numpy.maximum( sw_exit, sw_to_nw )
 
         return se_to_ne, se_to_nw, sw_to_ne, sw_to_nw
+    def limit_NS_EW_connections(self, ns_deepest_connection, ew_deepest_connection):
+        """Modify outer edges to satisfy NS and EW deepest connections"""
+        # Alias
+        U,V = self.u_effective.low,self.v_effective.low
+        n = numpy.minimum( V[2::2,::2], V[2::2,1::2] )
+        s = numpy.minimum( V[:-1:2,::2], V[:-1:2,1::2] )
+        e = numpy.minimum( U[::2,2::2], U[1::2,2::2] )
+        w = numpy.minimum( U[::2,:-1:2], U[1::2,:-1:2] )
+
+        needed = ns_deepest_connection > numpy.maximum( n, s )
+        j,i = numpy.nonzero( needed & ( s>=n ) ); J,I=2*j,2*i
+        V[J,I] = numpy.maximum( V[J,I], ns_deepest_connection[j,i] )
+        V[J,I+1] = numpy.maximum( V[J,I+1], ns_deepest_connection[j,i] )
+        j,i = numpy.nonzero( needed & ( s<=n ) ); J,I=2*j,2*i
+        V[J+2,I] = numpy.maximum( V[J+2,I], ns_deepest_connection[j,i] )
+        V[J+2,I+1] = numpy.maximum( V[J+2,I+1], ns_deepest_connection[j,i] )
+
+        needed = ew_deepest_connection > numpy.maximum( e, w )
+        j,i = numpy.nonzero( needed & ( w>=e ) ); J,I=2*j,2*i
+        U[J,I] = numpy.maximum( U[J,I], ew_deepest_connection[j,i] )
+        U[J+1,I] = numpy.maximum( U[J+1,I], ew_deepest_connection[j,i] )
+        j,i = numpy.nonzero( needed & ( w<=e ) ); J,I=2*j,2*i
+        U[J,I+2] = numpy.maximum( U[J,I+2], ew_deepest_connection[j,i] )
+        U[J+1,I+2] = numpy.maximum( U[J+1,I+2], ew_deepest_connection[j,i] )
     def diagnose_corner_pathways(self):
         """Returns deepest corner pathways"""
         sw = self.diagnose_SW_pathway()
@@ -607,6 +631,47 @@ class ThinWalls(GMesh):
         se_to_nw = numpy.maximum( se_to_nw, s_e_exit )
 
         return sw_to_sw, sw_to_nw, se_to_sw, se_to_nw
+    def limit_corner_connections(self, sw_deepest_connection, se_deepest_connection, ne_deepest_connection, nw_deepest_connection):
+        """Modify outer edges to satisfy deepest corner connections"""
+        # Alias
+        U, V = self.u_effective.low, self.v_effective.low
+        n = numpy.minimum( V[2::2,::2], V[2::2,1::2] )
+        s = numpy.minimum( V[:-1:2,::2], V[:-1:2,1::2] )
+        e = numpy.minimum( U[::2,2::2], U[1::2,2::2] )
+        w = numpy.minimum( U[::2,:-1:2], U[1::2,:-1:2] )
+
+        needed = sw_deepest_connection > numpy.maximum( s, w )
+        j,i = numpy.nonzero( needed & ( s>=w ) ); J,I=2*j,2*i
+        V[J,I] = numpy.maximum( V[J,I], sw_deepest_connection[j,i] )
+        V[J,I+1] = numpy.maximum( V[J,I+1], sw_deepest_connection[j,i] )
+        j,i = numpy.nonzero( needed & ( s<=w ) ); J,I=2*j,2*i
+        U[J,I] = numpy.maximum( U[J,I], sw_deepest_connection[j,i] )
+        U[J+1,I] = numpy.maximum( U[J+1,I], sw_deepest_connection[j,i] )
+
+        needed = se_deepest_connection > numpy.maximum( s, e )
+        j,i = numpy.nonzero( needed & ( s>=e ) ); J,I=2*j,2*i
+        V[J,I] = numpy.maximum( V[J,I], se_deepest_connection[j,i] )
+        V[J,I+1] = numpy.maximum( V[J,I+1], se_deepest_connection[j,i] )
+        j,i = numpy.nonzero( needed & ( s<=e ) ); J,I=2*j,2*i
+        U[J,I+2] = numpy.maximum( U[J,I+2], se_deepest_connection[j,i] )
+        U[J+1,I+2] = numpy.maximum( U[J+1,I+2], se_deepest_connection[j,i] )
+
+        needed = ne_deepest_connection > numpy.maximum( n, e )
+        j,i = numpy.nonzero( needed & ( n>=e ) ); J,I=2*j,2*i
+        V[J+2,I] = numpy.maximum( V[J+2,I], ne_deepest_connection[j,i] )
+        V[J+2,I+1] = numpy.maximum( V[J+2,I+1], ne_deepest_connection[j,i] )
+        j,i = numpy.nonzero( needed & ( n<=e ) ); J,I=2*j,2*i
+        U[J,I+2] = numpy.maximum( U[J,I+2], ne_deepest_connection[j,i] )
+        U[J+1,I+2] = numpy.maximum( U[J+1,I+2], ne_deepest_connection[j,i] )
+
+        needed = nw_deepest_connection > numpy.maximum( n, w )
+        j,i = numpy.nonzero( needed & ( n>=w ) ); J,I=2*j,2*i
+        V[J+2,I] = numpy.maximum( V[J+2,I], nw_deepest_connection[j,i] )
+        V[J+2,I+1] = numpy.maximum( V[J+2,I+1], nw_deepest_connection[j,i] )
+        j,i = numpy.nonzero( needed & ( n<=w ) ); J,I=2*j,2*i
+        U[J,I] = numpy.maximum( U[J,I], nw_deepest_connection[j,i] )
+        U[J+1,I] = numpy.maximum( U[J+1,I], nw_deepest_connection[j,i] )
+
     def coarsen(self):
         M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2])
         M.c_simple.ave = self.c_simple.mean4()
