@@ -502,6 +502,34 @@ class ThinWalls(GMesh):
         sw_to_nw = numpy.maximum( sw_exit, sw_to_nw )
 
         return se_to_ne, se_to_nw, sw_to_ne, sw_to_nw
+    def diagnose_corner_pathways(self):
+        """Returns deepest corner pathways"""
+        sw = self.diagnose_SW_pathway()
+        # Alias
+        C, U, V = self.c_effective, self.u_effective, self.v_effective
+        # Flip in j direction so j=S, i=E
+        C.flip(axis=0)
+        U.flip(axis=0)
+        V.flip(axis=0)
+        nw = self.diagnose_SW_pathway()
+        nw = numpy.flip(nw, axis=0)
+        # Flip in i direction so j=S, i=W
+        C.flip(axis=1)
+        U.flip(axis=1)
+        V.flip(axis=1)
+        ne = self.diagnose_SW_pathway()
+        ne = numpy.flip(numpy.flip(ne, axis=0), axis=1)
+        # Flip in j direction so j=N, i=W
+        C.flip(axis=0)
+        U.flip(axis=0)
+        V.flip(axis=0)
+        se = self.diagnose_SW_pathway()
+        se = numpy.flip(se, axis=1)
+        # Flip in i direction so j=N, i=E
+        C.flip(axis=1)
+        U.flip(axis=1)
+        V.flip(axis=1)
+        return sw, se, ne, nw
     def diagnose_SW_pathway(self):
         """Returns deepest SW pathway"""
         sw_to_sw, sw_to_nw, se_to_sw, se_to_nw = self.diagnose_SW_pathways()
