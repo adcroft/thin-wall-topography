@@ -35,7 +35,7 @@ def undo_break_array_to_blocks(a,xb=4,yb=1):
         raise Exception('This rotuine can only make 2x2 blocks!')
         ##Niki: Implement a better algo and lift this restriction
 
-def write_topog(h,hstd,hmin,hmax,fnam=None,format='NETCDF3_CLASSIC',description=None,history=None,source=None,no_changing_meta=None):
+def write_topog(h,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSIC',description=None,history=None,source=None,no_changing_meta=None):
     import netCDF4 as nc
 
     if fnam is None:
@@ -61,6 +61,12 @@ def write_topog(h,hstd,hmin,hmax,fnam=None,format='NETCDF3_CLASSIC',description=
     h_max=fout.createVariable('h_max','f8',('ny','nx'))
     h_max.units='meters'
     h_max[:]=hmax
+    x=fout.createVariable('x','f8',('ny','nx'))
+    x.units='meters'
+    x[:]=xx
+    y=fout.createVariable('y','f8',('ny','nx'))
+    y.units='meters'
+    y[:]=yy
     #global attributes
     if(not no_changing_meta):
     	fout.history = history
@@ -87,8 +93,8 @@ def plot():
     display.display(pl.gcf())
 
 def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs):
-    print("Doing block number ",part)
-    print("target grid shape: ",lon.shape,lat.shape)
+    print("  Doing block number ",part)
+    print("  Target sub mesh shape: ",lon.shape)
 
     target_mesh = GMesh.GMesh( lon=lon, lat=lat )
 
@@ -101,7 +107,7 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs):
     ##Niki: This is only for efficeincy and we want to remove the constraint for the final product.
     ##Niki: But in some cases it may not work!
     tis,tjs = slice(ti.min(), ti.max()+1,2), slice(tj.min(), tj.max()+1,2)
-    print('Slices:', tis, tjs )
+    print('  Slices j,i:', tjs, tis )
 
     # Read elevation data
     topo_elv = topo_elvs[tjs,tis]
@@ -109,26 +115,26 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs):
     topo_lon = topo_lons[tis]
     topo_lat = topo_lats[tjs]
 
-    print('Topo shape:', topo_elv.shape)
-    print('topography longitude range:',topo_lon.min(),topo_lon.max())
-    print('topography latitude  range:',topo_lat.min(),topo_lat.max())
+    print('  Topo shape:', topo_elv.shape)
+    print('  topography longitude range:',topo_lon.min(),topo_lon.max())
+    print('  topography latitude  range:',topo_lat.min(),topo_lat.max())
 
-    print("Target     longitude range:", lon.min(),lon.max())
-    print("Target     latitude  range:", lat.min(),lat.max())
+    print("  Target     longitude range:", lon.min(),lon.max())
+    print("  Target     latitude  range:", lat.min(),lat.max())
 
     # Refine grid by 2 till all source points are hit 
-    print("Refining the target to hit all source points ...")
+    print("  Refining the target to hit all source points ...")
     Glist = target_mesh.refine_loop( topo_lon, topo_lat , max_mb=8000);
     hits = Glist[-1].source_hits( topo_lon, topo_lat )
-    print("non-hit ratio: ",hits.size-hits.sum().astype(int)," / ",hits.size)
+    print("  non-hit ratio: ",hits.size-hits.sum().astype(int)," / ",hits.size)
 
     # Sample the topography on the refined grid
-    print("Sampling the source points on target mesh ...")
+    print("  Sampling the source points on target mesh ...")
     Glist[-1].sample_source_data_on_target_mesh(topo_lon,topo_lat,topo_elv)
-    print("Sampling finished...")
+    print("  Sampling finished...")
 
     # Coarsen back to the original taget grid
-    print("Coarsening back to the original taget grid ...")
+    print("  Coarsening back to the original taget grid ...")
     for i in reversed(range(1,len(Glist))):   # 1, makes it stop at element 1 rather than 0
         Glist[i].coarsenby2(Glist[i-1])
 
@@ -176,13 +182,15 @@ def main(argv):
             assert False, "unhandled option"
 
 
+    print("")
+    print("Generatin model topography for target grid ", gridfilename)
     #Information to write in file as metadata
     scriptgithash = subprocess.check_output("cd "+scriptdirname +";git rev-parse HEAD; exit 0",stderr=subprocess.STDOUT,shell=True).decode('ascii').rstrip("\n")
     scriptgitMod  = subprocess.check_output("cd "+scriptdirname +";git status --porcelain "+scriptbasename+" | awk '{print $1}' ; exit 0",stderr=subprocess.STDOUT,shell=True).decode('ascii').rstrip("\n")
     if("M" in str(scriptgitMod)):
         scriptgitMod = " , But was localy Modified!"
 
-    hist = "This grid file was generated via command " + ' '.join(sys.argv)
+    hist = "This file was generated via command " + ' '.join(sys.argv)
     if(not no_changing_meta):
         hist = hist + " on "+ str(datetime.date.today()) + " on platform "+ host
 
@@ -208,16 +216,15 @@ def main(argv):
     topo_lats = np.array( topo_data.variables[vy][:] )
     topo_elvs = np.array( topo_data.variables[ve][:,:] )
 
-    print('topography grid array shapes: ' , topo_lons.shape,topo_lats.shape)
-    print('topography longitude range:',topo_lons.min(),topo_lons.max())
-    print('topography latitude range:',topo_lats.min(),topo_lats.max())
-    print('Is mesh uniform?', GMesh.is_mesh_uniform( topo_lons, topo_lats ) )
-
     #Translate topo data to start at target_mesh.lon[0]
     topo_lons = np.roll(topo_lons,14400,axis=0) #Roll GEBCO longitude to right. 14400 was a lucky guess that checked out!
     topo_lons = np.where(topo_lons>60 , topo_lons-360, topo_lons) #Rename (0,60) as (-300,-180) 
     topo_elvs = np.roll(topo_elvs,14400,axis=1) #Roll GEBCO depth to the right by the same amount.
 
+    print(' topography grid array shapes: ' , topo_lons.shape,topo_lats.shape)
+    print(' topography longitude range:',topo_lons.min(),topo_lons.max())
+    print(' topography latitude range:',topo_lats.min(),topo_lats.max())
+    print(' Is mesh uniform?', GMesh.is_mesh_uniform( topo_lons, topo_lats ) )
 
     #Read a target grid
     # ## Read in Bipolar Northern cap grid for 1/8 degree model
@@ -225,16 +232,11 @@ def main(argv):
     targ_grid =  netCDF4.Dataset(gridfilename)
     targ_lon = np.array(targ_grid.variables['x'])
     targ_lat = np.array(targ_grid.variables['y'])
-
-
+    #x and y have shape (nyp,nxp). Topog does not need the last col for global grids (period in x). 
+    targ_lon = targ_lon[:,:-1]
+    targ_lat = targ_lat[:,:-1]
+    print(" Target mesh shape: ",targ_lon.shape)
     # ## Partition the Target grid into non-intersecting blocks
-    #  The 1/8 degree grid is too big to be handled in one go (my 64G machine runs out of memory and starts  to swap rendering the machine useless). Hence, we break the target to pieces and handle them one at a time. 
-    # 
-    # Future enhancement: 
-    # 
-    #     Make the block shape arbitrary rather than 2x2
-    #     Delegate these blocks to GPU tasks.
-
     #This works only if the target mesh is "regular"! Niki: Find the mathematical buzzword for "regular"!!
     #Is this a regular mesh?
     # if( .NOT. is_mesh_regular() ) throw
@@ -259,12 +261,16 @@ def main(argv):
         Hminlist.append(hmin)
         Hmaxlist.append(hmax)
 
-    print("Merging the blocks ...")
+    print(" Merging the blocks ...")
     height_refsamp = undo_break_array_to_blocks(Hlist,xb,yb)
     hstd_refsamp = undo_break_array_to_blocks(Hstdlist,xb,yb)
     hmin_refsamp = undo_break_array_to_blocks(Hminlist,xb,yb)
     hmax_refsamp = undo_break_array_to_blocks(Hmaxlist,xb,yb)
-    write_topog(height_refsamp,hstd_refsamp,hmin_refsamp,hmax_refsamp,fnam=outputfilename,no_changing_meta=True)
+    write_topog(height_refsamp,hstd_refsamp,hmin_refsamp,hmax_refsamp,targ_lon,targ_lat,fnam=outputfilename,description=desc,history=hist,source=source,no_changing_meta=no_changing_meta)
+
+    #Niki: Why isn't h periodic in x?  I.e., height_refsamp[:,0] != height_refsamp[:,-1]
+    print(" Periodicity test  : ", height_refsamp[0,0] , height_refsamp[0,-1])
+    print(" Periodicity break : ", (np.abs(height_refsamp[:,0]- height_refsamp[:,-1])).max() )
 
     if(plotem):
         import matplotlib.pyplot as plt
@@ -284,3 +290,11 @@ def main(argv):
 
 if __name__ == "__main__":
     main(sys.argv[1:])
+
+
+
+#B ny,nx=  118 720 , st ny,nx=  119 721
+#M ny,nx=  350 720 , st ny,nx=  351 721
+#S ny,nx=   56 720 , st ny,nx=   57 721
+
+#T ny,nx=  524 720
