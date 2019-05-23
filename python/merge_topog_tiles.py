@@ -26,7 +26,7 @@ def write_topog(h,hstd,hmin,hmax,fnam=None,format='NETCDF3_CLASSIC',description=
     height=fout.createVariable('height','f8',('ny','nx'))
     height.units='meters'
     height[:]=h
-    h_std=fout.createVariable('h_std','f8',('ny','nx'))
+    h_std=fout.createVariable('std','f8',('ny','nx'))
     h_std.units='meters'
     h_std[:]=hstd
     h_min=fout.createVariable('h_min','f8',('ny','nx'))

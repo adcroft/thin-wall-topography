@@ -33,6 +33,10 @@ def main():
                       help='name of the output file. If not specified, "iced_" is prepended to the name of the input file.')
   parser.add_argument('--shallow', type=float,
                       help='The "shallow" value (+ve, default 1.) to use when calculating the modified_mask. Wet points shallower than this are indicated with mask value of 2.')
+  parser.add_argument('--iseed', type=int,
+                      help='The seed for i-index, (iseed,jseed) should identify a non-land point in the input model topography.')
+  parser.add_argument('--jseed', type=int,
+                      help='The seed for j-index, (iseed,jseed) should identify a non-land point in the input model topography.')
   parser.add_argument('--analyze', action='store_true',
                       help='Report on impact of round shallow values to zero')
 
@@ -42,10 +46,14 @@ def main():
   if nFileName == ' ': nFileName = 'iced_'+optCmdLineArgs.filename
   shallow = 1
   if not optCmdLineArgs.shallow==None: shallow = optCmdLineArgs.shallow
+  iseed,jseed = 150,130 #default seeds for Ocean point
+  if not optCmdLineArgs.iseed==None: iseed = optCmdLineArgs.iseed
+  if not optCmdLineArgs.jseed==None: jseed = optCmdLineArgs.jseed
+	
   applyIce9(optCmdLineArgs.filename, nFileName, optCmdLineArgs.variable,
-            0., -40., shallow, optCmdLineArgs.analyze)
+            iseed,jseed, shallow, optCmdLineArgs.analyze)
 
-def applyIce9(fileName, nFileName, variable, x0, y0, shallow, analyze):
+def applyIce9(fileName, nFileName, variable, i0, j0, shallow, analyze):
 
   iRg = Dataset( fileName, 'r' );
   iDepth = iRg.variables[variable] # handle to the variable
@@ -69,8 +77,9 @@ def applyIce9(fileName, nFileName, variable, x0, y0, shallow, analyze):
   # A mask based solely on value of depth
   #notLand = np.where( depth<0, 1, 0)
   #notLand = ice9it(600,270,depth)
-  notLand = ice9it(1200,540,depth) #0.125 deg
+  #notLand = ice9it(1200,540,depth) #0.125 deg
   #notLand = ice9it(150,130,depth) #1deg and 0.5deg
+  notLand = ice9it(i0,j0,depth)
 
   rgWet = rg.createVariable('wet','f4',('ny','nx'))
   rgWet.long_name = 'Wet/dry mask'
@@ -115,7 +124,7 @@ def applyIce9(fileName, nFileName, variable, x0, y0, shallow, analyze):
     numNewWet = np.count_nonzero(newDepth)
     print( '# of wet points deeper than %f = %i'%(-shallow,numNewWet))
     print( '%i - %i = %i fewer points left'%(numNotLand,numNewWet,numNotLand-numNewWet))
-    newWet = ice9it(150,130,newDepth)
+    newWet = ice9it(i0,j0,newDepth)
     numNewDeep = np.count_nonzero(newWet)
     print( '# of wet deep points after Ice 9 = %i'%(numNewDeep))
     print( '%i - %i = %i fewer points left'%(numNewWet,numNewDeep,numNewWet-numNewDeep))
