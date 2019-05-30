@@ -25,7 +25,7 @@ def main():
        epilog='Written by A.Adcroft, 2013.')
   parser.add_argument('filename', type=str,
                       help='netcdf file to read.')
-  parser.add_argument('variable', type=str,
+  parser.add_argument('--variable', type=str,
                       nargs='?', default='depth',
                       help='Name of variable to plot.')
   parser.add_argument('--output', type=str,
