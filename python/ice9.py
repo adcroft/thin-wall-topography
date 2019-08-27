@@ -79,6 +79,12 @@ def applyIce9(fileName, nFileName, variable, i0, j0, shallow, analyze):
   #notLand = ice9it(600,270,depth)
   #notLand = ice9it(1200,540,depth) #0.125 deg
   #notLand = ice9it(150,130,depth) #1deg and 0.5deg
+  while depth[j0,i0] >= 0: 
+     print("Seed is not wet! Increasing jseed by 10")
+     j0 += 10
+  if depth[j0,i0] >= 0:
+     error("There is a problem with seed that could not be resolved. The seed location is not in the ocean!")  
+	
   notLand = ice9it(i0,j0,depth)
 
   rgWet = rg.createVariable('wet','f4',('ny','nx'))
