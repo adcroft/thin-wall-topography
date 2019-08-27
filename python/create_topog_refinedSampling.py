@@ -43,7 +43,7 @@ def write_topog(h,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSIC',descri
     fout=nc.Dataset(fnam,'w',format=format)
 
     ny=h.shape[0]; nx=h.shape[1]
-    print ('Writing netcdf file with ny,nx= ',ny,nx)
+    print ('Writing netcdf file ',fnam,' with ny,nx= ',ny,nx)
 
     ny=fout.createDimension('ny',ny)
     nx=fout.createDimension('nx',nx)

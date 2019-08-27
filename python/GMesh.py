@@ -247,6 +247,8 @@ class GMesh:
         nn_j = np.floor(0.5+(self.lat-lat[0])/dellat)
         nn_i = np.minimum(nn_i, sni-1)
         nn_j = np.minimum(nn_j, snj-1)
+        nn_i = np.maximum(nn_i, 0)
+        nn_j = np.maximum(nn_j, 0)
         assert nn_j.min()>=0, 'Negative j index calculated! j='+str(nn_j.min())
         assert nn_j.max()<snj, 'Out of bounds j index calculated! j='+str(nn_j.max())+'snj='+str(snj)
         assert nn_i.min()>=0, 'Negative i index calculated! i='+str(nn_i.min())
