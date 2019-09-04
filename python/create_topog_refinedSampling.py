@@ -52,6 +52,10 @@ def write_topog(h,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSIC',descri
     height=fout.createVariable('height','f8',('ny','nx'))
     height.units='meters'
     height[:]=h
+    wet=fout.createVariable('wet','f8',('ny','nx'))
+    wet.units='none'
+    wet[:]=np.where(h<0.,1.0,0.0)
+    
     h_std=fout.createVariable('h_std','f8',('ny','nx'))
     h_std.units='meters'
     h_std[:]=hstd
@@ -75,6 +79,46 @@ def write_topog(h,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSIC',descri
 
     fout.sync()
     fout.close()
+
+def get_indices1D(lon_grid,lat_grid,x,y):
+    """This function returns the j,i indices for the grid point closest to the input lon,lat coordinates."""
+    """It returns the j,i indices."""
+    lons=np.fabs(lon_grid-x)
+    lonm=np.where(lons==lons.min())
+    lats=np.fabs(lat_grid-y)
+    latm=np.where(lats==lats.min())
+    j0=latm[0][0]
+    i0=lonm[0][0]
+#    print("wanted: ",x,y)
+#    print("got:    ",lon_grid[i0] , lat_grid[j0])
+#    print(j0,i0)
+    return j0,i0
+
+def get_indices2D(lon_grid,lat_grid,x,y):
+    """This function returns the j,i indices for the grid point closest to the input lon,lat coordinates."""
+    """It returns the j,i indices."""
+    lons=np.fabs(lon_grid-x)
+    lonm=np.where(lons==lons.min())
+    lats=np.fabs(lat_grid-y)
+    latm=np.where(lats==lats.min())
+    j0=latm[0][0]
+    i0=lonm[1][0]
+#    print("wanted: ",x,y)
+#    print("got:    ",lon_grid[j0,i0] , lat_grid[j0,i0])
+#    print(j0,i0)
+    return j0,i0
+#Gibraltar
+#wanted:  32.0 -12.5
+#got:     31.9958333333 -12.5041666667
+#9299 25439
+#Gibraltar
+#wanted:  40.7 4.7
+#got:     40.6958333333 4.69583333333
+#11363 26483
+#Black sea
+#wanted:  44.0 36
+#got:     43.9958333333 36.0041666667
+#15120 26879
 
 def plot():
     pl.clf()
@@ -147,7 +191,7 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs):
 
 
 def usage(scriptbasename):
-    print(scriptbasename + ' --hgridfilename <input_hgrid_filepath> --outputfilename <output_topog_filepath>  [--plot --no_changing_meta]')
+    print(scriptbasename + ' --hgridfilename <input_hgrid_filepath> --outputfilename <output_topog_filepath>  [--plot --no_changing_meta --open_channels]')
 
 
 def main(argv):
@@ -158,9 +202,10 @@ def main(argv):
     scriptdirname = subprocess.check_output("dirname "+ scriptpath,shell=True).decode('ascii').rstrip("\n")
 
     plotem = False
+    open_channels = False
     no_changing_meta = False
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"hi:o:",["hgridfilename=","outputfilename=","no_changing_meta"])
+        opts, args = getopt.getopt(sys.argv[1:],"hi:o:",["hgridfilename=","outputfilename=","no_changing_meta","open_channels"])
     except getopt.GetoptError as err:
         print(err)
         usage(scriptbasename)
@@ -178,6 +223,8 @@ def main(argv):
             plotem = True
         elif opt in ("--no_changing_meta"):
             no_changing_meta = True
+        elif opt in ("--open_channels"):
+            open_channels = True
         else:
             assert False, "unhandled option"
 
@@ -225,10 +272,22 @@ def main(argv):
     print(' topography longitude range:',topo_lons.min(),topo_lons.max())
     print(' topography latitude range:',topo_lats.min(),topo_lats.max())
     print(' Is mesh uniform?', GMesh.is_mesh_uniform( topo_lons, topo_lats ) )
+    #Fix the topography to open some channels
+    if(open_channels):
+        #Bosporus mouth at Marmara Sea (29.03,41.04)
+        j0,i0=15724,39483 #get_indices1D(topo_lons, topo_lats ,29.03, 41.04)
+        #One grid cell thick (not survived ice9)
+        #topo_elvs[j0,i0]=topo_elvs[j0,i0-1]
+        #topo_elvs[j0+1,i0+2]=topo_elvs[j0+1,i0+1]
+        #topo_elvs[j0+3,i0+3]=topo_elvs[j0+3,i0+2]
+        #wide channel
+        j2,i2=15756, 39492 #get_indices1D(topo_lons, topo_lats ,29.1, 41.3)
+        topo_elvs[j0-10:j2,i0-10:i2+10]=topo_elvs[j0,i0-1]
 
+        #Dardanells' constrict
+        j1,i1=15616, 39166 #get_indices1D(topo_lons, topo_lats ,26.39, 40.14)
+        topo_elvs[j1+1,i1]=topo_elvs[j1,i1]
     #Read a target grid
-    # ## Read in Bipolar Northern cap grid for 1/8 degree model
-#    targ_grid =  netCDF4.Dataset('/net2/nnz/grid_generation/workdir/grid_OM4p125_new/tripolar_disp_res8.ncBP.nc')
     targ_grid =  netCDF4.Dataset(gridfilename)
     targ_lon = np.array(targ_grid.variables['x'])
     targ_lat = np.array(targ_grid.variables['y'])
@@ -236,7 +295,7 @@ def main(argv):
     targ_lon = targ_lon[:,:-1]
     targ_lat = targ_lat[:,:-1]
     print(" Target mesh shape: ",targ_lon.shape)
-    # ## Partition the Target grid into non-intersecting blocks
+    ### Partition the Target grid into non-intersecting blocks
     #This works only if the target mesh is "regular"! Niki: Find the mathematical buzzword for "regular"!!
     #Is this a regular mesh?
     # if( .NOT. is_mesh_regular() ) throw
