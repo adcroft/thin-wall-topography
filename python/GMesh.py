@@ -220,8 +220,10 @@ class GMesh:
         coarser_mesh.h_max[:-1,:-1] = np.maximum(self.height[:-1:2,:-1:2],self.height[1::2,1::2])
         coarser_mesh.h_max[:-1,:-1] = np.maximum(coarser_mesh.h_max[:-1,:-1],self.height[1::2,0:-1:2])
         coarser_mesh.h_max[:-1,:-1] = np.maximum(coarser_mesh.h_max[:-1,:-1],self.height[0:-1:2,1::2])
-       
-        
+
+    def mdist(x1,x2):
+        """Returns positive distance modulo 360."""
+        return np.minimum( np.mod(x1-x2,360.), np.mod(x2-x1,360.) )
 
     def find_nn_uniform_source(self, lon, lat):
         """Returns the i,j arrays for the indexes of the nearest neighbor point to grid (lon,lat)"""

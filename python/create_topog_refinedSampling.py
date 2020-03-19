@@ -136,7 +136,7 @@ def plot():
     plt.pause(1)
     display.display(pl.gcf())
 
-def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs):
+def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
     print("  Doing block number ",part)
     print("  Target sub mesh shape: ",lon.shape)
 
@@ -168,7 +168,7 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs):
 
     # Refine grid by 2 till all source points are hit 
     print("  Refining the target to hit all source points ...")
-    Glist = target_mesh.refine_loop( topo_lon, topo_lat , max_mb=8000);
+    Glist = target_mesh.refine_loop( topo_lon, topo_lat , max_mb=max_mb);
     hits = Glist[-1].source_hits( topo_lon, topo_lat )
     print("  non-hit ratio: ",hits.size-hits.sum().astype(int)," / ",hits.size)
 
@@ -187,7 +187,7 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs):
     #filename = 'topog_refsamp_BP.nc'+str(b) 
     #write_topog(Glist[0].height,fnam=filename,no_changing_meta=True)
     #print("haigts shape:", lons[b].shape,Hlist[b].shape)
-    return Glist[0].height,Glist[0].h_std,Glist[0].h_min,Glist[0].h_max
+    return Glist[0].height,Glist[0].h_std,Glist[0].h_min,Glist[0].h_max, hits
 
 
 def usage(scriptbasename):
