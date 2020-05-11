@@ -80,7 +80,7 @@ def write_topog(h,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSIC',descri
     fout.sync()
     fout.close()
 
-def get_indices1D(lon_grid,lat_grid,x,y):
+def get_indices1D_old(lon_grid,lat_grid,x,y):
     """This function returns the j,i indices for the grid point closest to the input lon,lat coordinates."""
     """It returns the j,i indices."""
     lons=np.fabs(lon_grid-x)
@@ -93,6 +93,29 @@ def get_indices1D(lon_grid,lat_grid,x,y):
 #    print("got:    ",lon_grid[i0] , lat_grid[j0])
 #    print(j0,i0)
     return j0,i0
+def mdist(x1,x2):
+    """Returns positive distance modulo 360."""
+    return np.minimum( np.mod(x1-x2,360.), np.mod(x2-x1,360.) )
+def get_indices1D(lon_grid,lat_grid,x,y):
+    """This function returns the j,i indices for the grid point closest to the input lon,lat coordinates."""
+    """It returns the j,i indices."""
+#    lons=np.fabs(lon_grid-x)
+    lons=np.fabs(mdist(lon_grid,x))
+    lonm=np.where(lons==lons.min())
+    lats=np.fabs(lat_grid-y)
+    latm=np.where(lats==lats.min())
+    j0=latm[0][0]
+    i0=lonm[0][0]
+    print(" wanted: ",x,y)
+    print(" got:    ",lon_grid[i0] , lat_grid[j0])
+    good=False
+    if(abs(x-lon_grid[i0]) < abs(lon_grid[1]-lon_grid[0])):
+        good=True
+        print("  good")
+    else:
+        print("  bad")
+    print(" j,i=",j0,i0)
+    return j0,i0,good
 
 def get_indices2D(lon_grid,lat_grid,x,y):
     """This function returns the j,i indices for the grid point closest to the input lon,lat coordinates."""
@@ -150,7 +173,8 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
     #Sample every other source points 
     ##Niki: This is only for efficeincy and we want to remove the constraint for the final product.
     ##Niki: But in some cases it may not work!
-    tis,tjs = slice(ti.min(), ti.max()+1,2), slice(tj.min(), tj.max()+1,2)
+    #tis,tjs = slice(ti.min(), ti.max()+1,2), slice(tj.min(), tj.max()+1,2)
+    tis,tjs = slice(ti.min(), ti.max()+1,1), slice(tj.min(), tj.max()+1,1)
     print('  Slices j,i:', tjs, tis )
 
     # Read elevation data
@@ -204,8 +228,12 @@ def main(argv):
     plotem = False
     open_channels = False
     no_changing_meta = False
+    # URL of topographic data, names of longitude, latitude and elevation variables
+    url,vx,vy,ve = '/work/Niki.Zadeh/datasets/topography/GEBCO_2014_2D.nc','lon','lat','elevation'
+    # url,vx,vy,ve = 'http://thredds.socib.es/thredds/dodsC/ancillary_data/bathymetry/MED_GEBCO_30sec.nc','lon','lat','elevation'
+    # url,vx,vy,ve = 'http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NGDC/.ETOPO1/.z_bedrock/dods','lon','lat','z_bedrock'
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"hi:o:",["hgridfilename=","outputfilename=","no_changing_meta","open_channels"])
+        opts, args = getopt.getopt(sys.argv[1:],"hi:o:",["hgridfilename=","outputfilename=","no_changing_meta","open_channels","source_file=","source_lon=","source_lat=","source_elv="])
     except getopt.GetoptError as err:
         print(err)
         usage(scriptbasename)
@@ -219,6 +247,14 @@ def main(argv):
             gridfilename = arg
         elif opt in ("-o", "--outputfilename"):
             outputfilename = arg
+        elif opt in ("--source_file"):
+            url = arg
+        elif opt in ("--source_lon"):
+            vx = arg
+        elif opt in ("--source_lat"):
+            vy = arg
+        elif opt in ("--source_elv"):
+            ve = arg
         elif opt in ("--plot"):
             plotem = True
         elif opt in ("--no_changing_meta"):
@@ -248,14 +284,8 @@ def main(argv):
         source =  source + scriptpath + " had git hash " + scriptgithash + scriptgitMod 
         source =  source + ". To obtain the grid generating code do: git clone  https://github.com/nikizadehgfdl/thin-wall-topography.git ; cd thin-wall-topography;  git checkout "+scriptgithash
 
-    
-
     # # Open and read the topographic dataset
     # Open a topography dataset, check that the topography is on a uniform grid.
-    # URL of topographic data, names of longitude, latitude and elevation variables
-    url,vx,vy,ve = '/net2/nnz/thin-wall-topography/python/workdir/GEBCO_2014_2D.nc','lon','lat','elevation'
-    # url,vx,vy,ve = 'http://thredds.socib.es/thredds/dodsC/ancillary_data/bathymetry/MED_GEBCO_30sec.nc','lon','lat','elevation'
-    # url,vx,vy,ve = 'http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NGDC/.ETOPO1/.z_bedrock/dods','lon','lat','z_bedrock'
     topo_data = netCDF4.Dataset(url)
 
     # Read coordinates of topography
@@ -263,15 +293,6 @@ def main(argv):
     topo_lats = np.array( topo_data.variables[vy][:] )
     topo_elvs = np.array( topo_data.variables[ve][:,:] )
 
-    #Translate topo data to start at target_mesh.lon[0]
-    topo_lons = np.roll(topo_lons,14400,axis=0) #Roll GEBCO longitude to right. 14400 was a lucky guess that checked out!
-    topo_lons = np.where(topo_lons>60 , topo_lons-360, topo_lons) #Rename (0,60) as (-300,-180) 
-    topo_elvs = np.roll(topo_elvs,14400,axis=1) #Roll GEBCO depth to the right by the same amount.
-
-    print(' topography grid array shapes: ' , topo_lons.shape,topo_lats.shape)
-    print(' topography longitude range:',topo_lons.min(),topo_lons.max())
-    print(' topography latitude range:',topo_lats.min(),topo_lats.max())
-    print(' Is mesh uniform?', GMesh.is_mesh_uniform( topo_lons, topo_lats ) )
     #Fix the topography to open some channels
     if(open_channels):
         #Bosporus mouth at Marmara Sea (29.03,41.04)
@@ -295,6 +316,21 @@ def main(argv):
     targ_lon = targ_lon[:,:-1]
     targ_lat = targ_lat[:,:-1]
     print(" Target mesh shape: ",targ_lon.shape)
+    #Translate topo data to start at target_mesh.lon_m[0]
+    #Why/When?
+    jllc,illc,status1=get_indices1D(topo_lons, topo_lats ,targ_lon[0,0] ,targ_lat[0,0])
+    jurc,iurc,status2=get_indices1D(topo_lons, topo_lats ,targ_lon[0,-1],targ_lat[-1,0])
+    if(not status1 or not status2):
+        print(' shifting topo data to start at target lon')
+        topo_lons = np.roll(topo_lons,-illc,axis=0) #Roll data longitude to right
+        topo_lons = np.where(topo_lons>=topo_lons[0] , topo_lons-360, topo_lons) #Rename (0,60) as (-300,-180) 
+        topo_elvs = np.roll(topo_elvs,-illc,axis=1) #Roll data depth to the right by the same amount.
+
+    print(' topography grid array shapes: ' , topo_lons.shape,topo_lats.shape)
+    print(' topography longitude range:',topo_lons.min(),topo_lons.max())
+    print(' topography longitude range:',topo_lons[0],topo_lons[-1000])
+    print(' topography latitude range:',topo_lats.min(),topo_lats.max())
+    print(' Is mesh uniform?', GMesh.is_mesh_uniform( topo_lons, topo_lats ) )
     ### Partition the Target grid into non-intersecting blocks
     #This works only if the target mesh is "regular"! Niki: Find the mathematical buzzword for "regular"!!
     #Is this a regular mesh?
@@ -314,7 +350,7 @@ def main(argv):
     for part in range(0,xb):
         lon = lons[part]
         lat = lats[part]
-        h,hstd,hmin,hmax = do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs)
+        h,hstd,hmin,hmax,hits = do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs)
         Hlist.append(h)
         Hstdlist.append(hstd)
         Hminlist.append(hmin)
