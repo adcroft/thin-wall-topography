@@ -243,6 +243,7 @@ class GMesh:
 #neither works for bipole
 
         if abs( (lon[-1]-lon[0])-360 )<=360.*np.finfo( lon.dtype ).eps:
+            print("Detected repeated longitude ",lon[0],lon[-1])
             sni-=1 # Account for repeated longitude
         # Nearest integer (the upper one if equidistant)
         nn_i = np.floor(np.mod(self.lon-lon[0]+0.5*dellon,360)/dellon)
