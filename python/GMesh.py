@@ -305,3 +305,67 @@ class GMesh:
         self.h_max = np.zeros(self.lon.shape)
         return
 
+
+    def least_square_plane_estimate(self, xs,ys,zs):
+        """This function returns the estimates for h2 and h and also mean,min,max of the date
+           in each grid cell. """
+        """It estimates h and h2 by fitting a least-squares plane through the data points in each grid cell."""
+        """The plane is calculated via a standard algorithm explained in text books (T. Shifrin, Multivariable Mathematic, p227)"""
+        """h2 is estiamted as the standard deviation of z-distance of data points in the grid cell from the fit plane."""
+        """h  is estiamted as the value of the plane for z calculated at the corner of the grid cell."""
+        """The algorithm as implemented here is very slow. Because of the matrix manipulations in each grid cell 
+           I do not know how to use numpy array features for the mesh and do away with the outer I,J loops."
+ 
+        H2=np.zeros(self.lon.shape)
+        Zij=np.zeros(self.lon.shape)
+        Zmean=np.zeros(self.lon.shape)
+        Zmin=np.zeros(self.lon.shape)
+        Zmax=np.zeros(self.lon.shape)
+
+        ti,tj = self.find_nn_uniform_source(xs,ys)
+        #Loop over each grid cell. Is there a numpy way of doing this?
+        for J in range(0,self.lat.shape[0]-1):
+            for I in range(0,self.lon.shape[1]-1):
+                #bounds of a cell, assuming a uniform cells, generalize?
+                lon_min=self.lon[J,I]
+                lon_max=self.lon[J,I+1]
+                lat_min=self.lat[J,I]
+                lat_max=self.lat[J+1,I]
+                #We don't know how manydata points are in each grid cell. Let's say it's M.
+                #According to the algorithm, we need to create a M by 3 matrix, A
+                #the 1st column is the x-coordinates of the data points in the cell
+                #the 2nd column is the y-coordinates of the data points in the cell
+                #the 2nd column is all 1's
+                #We also need to create a column matrix B made of the M 
+                #z-ccordinates of the data points in the cell
+                A=[]
+                B=[]
+                for jj in range(tj[J,I],tj[J+1,I]):
+                    if((ys[jj]>=lat_min) and (ys[jj]<lat_max)):
+                        for ii in range(ti[J,I],ti[J,I+1]):
+                            if(xs[ii] >= lon_min and xs[ii] < lon_max):
+                                A.append(np.array([xs[ii],ys[jj],1]))
+                                B.append(np.array([zs[jj,ii]]))
+                #cast these in numpy arrays
+                A = np.asarray(A) 
+                B = np.asarray(B)
+                #The algorithm in short proves that the least-sqaure fit plane z=mx+ny+c
+                #denoted by a vectory X=(m,n,c), is the "best" solution of AX=B 
+                #Mathematically this equation does not have a solution unless all the data point
+                #happen to be on a plane. But it can be shown that the following "best" solution
+                #for X is identical to minimizing the sum of squared z-distances of data points
+                #to the plane: X=(A^T . A)^-1 . A^T . B 
+                AT = A.T
+                X = np.matmul(np.matmul(np.linalg.inv(np.matmul(AT,A)) , AT), B)
+                D=B-np.matmul(A,X)
+                H2[J,I]=D.std() # (np.linalg.norm(D))**2
+                Zij[J,I] = X[0]*self.lon[J,I]+X[1]*self.lat[J,I]+X[2]
+                Zmean[J,I]= B.mean()
+                Zmin[J,I] = B.min()
+                Zmax[J,I] = B.max()
+
+                #Check: The sum of Distances must be very small, almost zero
+                assert abs(D.sum())<1.0, "Bad fit: The sum of Distances is large "+str(D.sum())+", "+str(Zmax[J,I])
+
+        return H2,Zmean,Zmin,Zmax,Zij
+
