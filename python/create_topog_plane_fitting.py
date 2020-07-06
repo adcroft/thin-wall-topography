@@ -54,7 +54,7 @@ def write_topog(hfit,hmean,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSI
     height[:]=hfit
     wet=fout.createVariable('wet','f8',('ny','nx'))
     wet.units='none'
-    wet[:]=np.where(h<0.,1.0,0.0)
+    wet[:]=np.where(hfit<0.,1.0,0.0)
     
     h_std=fout.createVariable('h_std','f8',('ny','nx'))
     h_std.units='meters'
@@ -171,23 +171,22 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
 
     target_mesh = GMesh.GMesh( lon=lon, lat=lat )
     # Indices in topographic data
-    ti,tj = target_mesh.find_nn_uniform_source( topo_lons, topo_lats )
-    tis,tjs = slice(ti.min(), ti.max()+1,1), slice(tj.min(), tj.max()+1,1)
-
+    #ti,tj = target_mesh.find_nn_uniform_source( topo_lons, topo_lats )
+    #tis,tjs = slice(ti.min(), ti.max()+1,1), slice(tj.min(), tj.max()+1,1)
     # Read elevation data
-    topo_elv = topo_elvs[tjs,tis]
+    #topo_elv = topo_elvs[tjs,tis]
     # Extract appropriate coordinates
-    topo_lon = topo_lons[tis]
-    topo_lat = topo_lats[tjs]
+    #topo_lon = topo_lons[tis]
+    #topo_lat = topo_lats[tjs]
 
-    print('  Topo shape:', topo_elv.shape)
-    print('  topography longitude range:',topo_lon.min(),topo_lon.max())
-    print('  topography latitude  range:',topo_lat.min(),topo_lat.max())
+    print('  Topo shape:', topo_elvs.shape)
+    print('  topography longitude range:',topo_lons.min(),topo_lons.max())
+    print('  topography latitude  range:',topo_lats.min(),topo_lats.max())
 
     print("  Target     longitude range:", lon.min(),lon.max())
     print("  Target     latitude  range:", lat.min(),lat.max())
 
-    Zstd,Zmean,Zmin,Zmax,Zfit = target_mesh.least_square_plane_estimate(topo_lon,topo_lat,topo_elv)
+    Zstd,Zmean,Zmin,Zmax,Zfit = target_mesh.least_square_plane_estimate(topo_lons,topo_lats,topo_elvs)
     return Zstd,Zmean,Zmin,Zmax,Zfit
 
 
@@ -197,6 +196,7 @@ def usage(scriptbasename):
 
 def main(argv):
     import socket
+    import time
     host = str(socket.gethostname())
     scriptpath = sys.argv[0]
     scriptbasename = subprocess.check_output("basename "+ scriptpath,shell=True).decode('ascii').rstrip("\n")
@@ -261,6 +261,8 @@ def main(argv):
         source =  source + scriptpath + " had git hash " + scriptgithash + scriptgitMod 
         source =  source + ". To obtain the grid generating code do: git clone  https://github.com/nikizadehgfdl/thin-wall-topography.git ; cd thin-wall-topography;  git checkout "+scriptgithash
 
+    #Time it
+    tic = time.perf_counter()
     # # Open and read the topographic dataset
     # Open a topography dataset, check that the topography is on a uniform grid.
     topo_data = netCDF4.Dataset(url)
@@ -328,10 +330,11 @@ def main(argv):
     hmean_ = undo_break_array_to_blocks(Hminlist,xb,yb)
     write_topog(hfit_,hmean_,hstd_,hmin_,hmax_,targ_lon,targ_lat,fnam=outputfilename,description=desc,history=hist,source=source,no_changing_meta=no_changing_meta)
 
-    #Niki: Why isn't h periodic in x?  I.e., height_refsamp[:,0] != height_refsamp[:,-1]
-    print(" Periodicity test  : ", height_refsamp[0,0] , height_refsamp[0,-1])
-    print(" Periodicity break : ", (np.abs(height_refsamp[:,0]- height_refsamp[:,-1])).max() )
-
+    #Niki: Why isn't h periodic in x?  I.e., h[:,0] != h[:,-1]
+    print(" Periodicity test  : ", hfit_[0,0] , hfit_[0,-1])
+    print(" Periodicity break : ", (np.abs(hfit_[:,0]- hfit_[:,-1])).max() )
+    toc = time.perf_counter()
+    print(f"It took {toc - tic:0.4f} seconds")
     if(plotem):
         import matplotlib.pyplot as plt
         import pylab as pl
