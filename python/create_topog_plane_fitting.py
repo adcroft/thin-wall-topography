@@ -35,14 +35,14 @@ def undo_break_array_to_blocks(a,xb=4,yb=1):
         raise Exception('This rotuine can only make 2x2 blocks!')
         ##Niki: Implement a better algo and lift this restriction
 
-def write_topog(hfit,hmean,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSIC',description=None,history=None,source=None,no_changing_meta=None):
+def write_topog(hmean,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSIC',description=None,history=None,source=None,no_changing_meta=None):
     import netCDF4 as nc
 
     if fnam is None:
       fnam='topog.nc'
     fout=nc.Dataset(fnam,'w',format=format)
 
-    ny=hfit.shape[0]; nx=hfit.shape[1]
+    ny=hmean.shape[0]; nx=hmean.shape[1]
     print ('Writing netcdf file ',fnam,' with ny,nx= ',ny,nx)
 
     ny=fout.createDimension('ny',ny)
@@ -51,10 +51,10 @@ def write_topog(hfit,hmean,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSI
     tile=fout.createVariable('tile','S1',('string'))
     height=fout.createVariable('height','f8',('ny','nx'))
     height.units='meters'
-    height[:]=hfit
+    height[:]=hmean
     wet=fout.createVariable('wet','f8',('ny','nx'))
     wet.units='none'
-    wet[:]=np.where(hfit<0.,1.0,0.0)
+    wet[:]=np.where(hmean<0.,1.0,0.0)
     
     h_std=fout.createVariable('h_std','f8',('ny','nx'))
     h_std.units='meters'
@@ -186,8 +186,8 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
     print("  Target     longitude range:", lon.min(),lon.max())
     print("  Target     latitude  range:", lat.min(),lat.max())
 
-    Zstd,Zmean,Zmin,Zmax,Zfit = target_mesh.least_square_plane_estimate(topo_lons,topo_lats,topo_elvs)
-    return Zstd,Zmean,Zmin,Zmax,Zfit
+    Zstd,Zmean,Zmin,Zmax = target_mesh.least_square_plane_estimate(topo_lons,topo_lats,topo_elvs)
+    return Zstd,Zmean,Zmin,Zmax
 
 
 def usage(scriptbasename):
@@ -307,7 +307,6 @@ def main(argv):
     lats=break_array_to_blocks(targ_lat,xb,yb)
 
     #We must loop over the 4 partitions
-    Hlist=[]
     Hstdlist=[]
     Hminlist=[]
     Hmaxlist=[]
@@ -315,24 +314,22 @@ def main(argv):
     for part in range(0,xb):
         lon = lons[part]
         lat = lats[part]
-        Zstd,Zmean,Zmin,Zmax,Zfit = do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs)
-        Hlist.append(Zfit)
+        Zstd,Zmean,Zmin,Zmax = do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs)
         Hstdlist.append(Zstd)
         Hminlist.append(Zmin)
         Hmaxlist.append(Zmax)
         Hmeanlist.append(Zmean)
 
     print(" Merging the blocks ...")
-    hfit_ = undo_break_array_to_blocks(Hlist,xb,yb)
     hstd_ = undo_break_array_to_blocks(Hstdlist,xb,yb)
     hmin_ = undo_break_array_to_blocks(Hminlist,xb,yb)
     hmax_ = undo_break_array_to_blocks(Hmaxlist,xb,yb)
-    hmean_ = undo_break_array_to_blocks(Hminlist,xb,yb)
-    write_topog(hfit_,hmean_,hstd_,hmin_,hmax_,targ_lon,targ_lat,fnam=outputfilename,description=desc,history=hist,source=source,no_changing_meta=no_changing_meta)
+    hmean_= undo_break_array_to_blocks(Hmeanlist,xb,yb)
+    write_topog(hmean_,hstd_,hmin_,hmax_,targ_lon,targ_lat,fnam=outputfilename,description=desc,history=hist,source=source,no_changing_meta=no_changing_meta)
 
     #Niki: Why isn't h periodic in x?  I.e., h[:,0] != h[:,-1]
-    print(" Periodicity test  : ", hfit_[0,0] , hfit_[0,-1])
-    print(" Periodicity break : ", (np.abs(hfit_[:,0]- hfit_[:,-1])).max() )
+    print(" Periodicity test  : ", hmean_[0,0] , hmean_[0,-1])
+    print(" Periodicity break : ", (np.abs(hmean_[:,0]- hmean_[:,-1])).max() )
     toc = time.perf_counter()
     print(f"It took {toc - tic:0.4f} seconds")
     if(plotem):
@@ -347,7 +344,7 @@ def main(argv):
         ax.stock_img()
         ax.coastlines()
         ax.gridlines()
-        im = ax.pcolormesh(targ_lon,targ_lat,hfit_, transform=cartopy.crs.PlateCarree())
+        im = ax.pcolormesh(targ_lon,targ_lat,hmean_, transform=cartopy.crs.PlateCarree())
         plt.colorbar(im,ax=ax);
 
 

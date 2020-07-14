@@ -313,13 +313,17 @@ class GMesh:
         """h2 is estiamted as the standard deviation of z-distance of data points in the grid cell from the fit plane."""
         """h  is estiamted as the value of plane for z calculated at the corner of the grid cell."""
 
-        Zstd=np.zeros(self.lon.shape)
-        Zij=np.zeros(self.lon.shape)
-        Zmean=np.zeros(self.lon.shape)
-        Zmin=np.zeros(self.lon.shape)
-        Zmax=np.zeros(self.lon.shape)
-        
+        epsilon=1.0e-5
+        #indices of nearest neighbor source point to each target mesh point 
         ti,tj = self.find_nn_uniform_source(xs,ys)
+        
+        #Initialize with nans as missing values
+        #This will leave some mesh point values as nans
+        Zmean=np.empty(self.lon.shape)*np.nan
+        Zmin =np.empty(self.lon.shape)*np.nan
+        Zmax =np.empty(self.lon.shape)*np.nan
+        Zstd =np.empty(self.lon.shape)*np.nan
+
         #Loop over each grid cell. Is there a numpy way of doing this?
         dlon=np.roll(self.lon,shift=-1,axis=1)-self.lon
         dlat=np.roll(self.lat,shift=-1,axis=0)-self.lat
@@ -329,9 +333,18 @@ class GMesh:
         dlon[:,-1]=dlon[:,-2] 
         dlat[-1,:]=dlat[-2,:] 
         dti[:,-1]=dti[:,-2] 
+        #print(dtj)
         dtj[-1,:]=dtj[-2,:] 
+        #print(dtj)
         for J in range(0,self.lat.shape[0]):
-            for I in range(0,self.lon.shape[1]):                
+            for I in range(0,self.lon.shape[1]): 
+                #Initialize to the NN source value. Reasonable?
+                znn=zs[tj[J,I],ti[J,I]]
+                Zmean[J,I]= znn
+                Zmin[J,I] = znn
+                Zmax[J,I] = znn
+                Zstd[J,I] = 0.0
+                
                 #bounds of a target cell
                 lon_min=self.lon[J,I]
                 lon_max=lon_min+dlon[J,I]
@@ -342,29 +355,37 @@ class GMesh:
                 tj_max=tj_min+dtj[J,I]
                 ti_min=ti[J,I]
                 ti_max=ti_min+dti[J,I]
-                ti_max=min(ti_max,xs.shape[0])
-                tj_max=min(tj_max,ys.shape[0])
-                #We don't know how manydata points are in each grid cell. Let's say it's M.
+                ti_max=min(ti_max,xs.shape[0]-1)
+                tj_max=min(tj_max,ys.shape[0]-1)
+                #We don't know how many data points are in each grid cell. Let's say it's M.
                 #According to the algorithm, we need to create 
                 X=[]
                 Y=[]
                 Z=[]
-                for jj in range(tj_min,tj_max): #+1
-                #    print('j ',jj)
+                #print('J,I ',J,I)
+                #print(lon_min,lon_max)
+                #print(ti_min,ti_max)
+                #print(lat_min,lat_max)
+                #print(tj_min,tj_max,dtj[J,I])
+                for jj in range(tj_min,tj_max+1):
+                    #print(ys[jj],lat_min,lat_max)
                     if((ys[jj]>=lat_min) and (ys[jj]<lat_max)):
-                        for ii in range(ti_min,ti_max): #+1
-                #            print('i ',ii)
+                        for ii in range(ti_min,ti_max+1):
                             if(xs[ii] >= lon_min and xs[ii] < lon_max):
+                                #print('jj,ii',jj,ii)
                                 X.append(np.array(xs[ii]))
                                 Y.append(np.array(ys[jj]))
                                 Z.append(np.array(zs[jj,ii]))
+                #print(len(Z))
+                if(len(Z)==0):
+                    continue
                 #cast these in numpy arrays
                 X = np.asarray(X) 
                 Y = np.asarray(Y)
                 Z = np.asarray(Z)
                 #The algorithm fits a plane z=P(x,y) by minimizing \sum_i (z_i - P(x_i,y_i)) 
                 #It shows that
-                #1. P is of the form P = zm - ax*(x-xm) - ay*(y-ym), 
+                #1. P is of the form P = zm + ax*(x-xm) + ay*(y-ym), 
                 #                    xm,ym,zm being the means of data x_i,y_i,z_i respectively
                 #     I.e., the least square plane passes through the point (xm,ym,zm)
                 #2. It gives the following formula for ax and ay (solution of 2by2 linear system)
@@ -379,19 +400,24 @@ class GMesh:
                 syz=np.dot(Y,Z)/N
                 sxz=np.dot(X,Z)/N
                 
-                det_inv=1.0/(sxx*syy-sxy*sxy)
-                ax=(sxz*syy-syz*sxy)*det_inv
-                ay=(syz*sxx-sxz*sxy)*det_inv
+                det=(sxx*syy-sxy*sxy)
+                if(abs(det) < epsilon): #No solutions
+                    continue
+                ax=(sxz*syy-syz*sxy)/det
+                ay=(syz*sxx-sxz*sxy)/det
                 d=Z-zm - ax*(X-xm) - ay*(Y-ym)
                 
                 Zstd[J,I]=d.std()
-                Zij[J,I] = zm + ax*(self.lon[J,I]-xm)+ay*(self.lat[J,I]-ym)
+                #Zij[J,I] = zm + ax*(self.lon[J,I]-xm)+ay*(self.lat[J,I]-ym) #corner fit value
                 Zmean[J,I]= zm
                 Zmin[J,I] = Z.min()
                 Zmax[J,I] = Z.max()
 
                 #Check: The sum of Distances must be very small, almost zero
-                assert abs(d.sum()<0.001), "Bad fit: The sum of Distances is large "+str(d.sum())+str(Zmin[J,I])
+                #assert abs(d.sum())<0.00001, "Bad fit: The sum of Distances is large at "+str(I)+","+str(J)+" = "+str(d.sum())+" compared to min  "+str(Zmin[J,I])
+                if(abs(d.sum())>epsilon):
+                    print("Bad fit: The sum of Distances is large at ("+str(I)+","+str(J)+") = "+str(d.sum())+" compared to min  "+str(Zmin[J,I]))
 
-        return Zstd,Zmean,Zmin,Zmax,Zij
+        return Zstd,Zmean,Zmin,Zmax
+
 
