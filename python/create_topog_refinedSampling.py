@@ -159,6 +159,15 @@ def plot():
     plt.pause(1)
     display.display(pl.gcf())
 
+def refine_by_repeat(x,rf):
+    xrf=np.repeat(np.repeat(x[:,:],rf,axis=0),rf,axis=1) #refine by repeating values
+    return xrf
+
+def extend_by_zeros(x,shape):
+    ext=np.zeros(shape)
+    ext[:x.shape[0],:x.shape[1]] = x
+    return ext
+
 def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
     print("  Doing block number ",part)
     print("  Target sub mesh shape: ",lon.shape)
@@ -205,13 +214,55 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
     print("  Coarsening back to the original taget grid ...")
     for i in reversed(range(1,len(Glist))):   # 1, makes it stop at element 1 rather than 0
         Glist[i].coarsenby2(Glist[i-1])
+    
+    print("Roughness calculation")
+    #Roughness calculation by plane fitting
+    #Calculate the slopes of the planes on the coarsest (model) grid cells
+    G=Glist[0]
+    denom=(G.xxm-G.xm*G.xm)*(G.yym-G.ym*G.ym)-(G.xym-G.xm*G.ym)*(G.xym-G.xm*G.ym)
+    alphd=(G.xzm-G.xm*G.zm)*(G.yym-G.ym*G.ym)-(G.yzm-G.ym*G.zm)*(G.xym-G.xm*G.ym)
+    betad=(G.yzm-G.ym*G.zm)*(G.xxm-G.xm*G.xm)-(G.xzm-G.xm*G.zm)*(G.xym-G.xm*G.ym)
+    #alph = alphd/denom
+    #beta = betad/denom
+
+    rf=2**(len(Glist)-1) #refinement factor
+    #Generate the refined arrays from coarse arrays by repeating the coarse elements rf times
+    #These arrays have the same values on finest mesh points inside each coarse cell by construction.
+    #They are being used to calculate the (least-square) distance of data points
+    #inside that cell from the fitted plane in that cell.
+    xmrf=refine_by_repeat(G.xm,rf)
+    ymrf=refine_by_repeat(G.ym,rf)
+    zmrf=refine_by_repeat(G.zm,rf)
+    alphdrf=refine_by_repeat(alphd,rf)
+    betadrf=refine_by_repeat(betad,rf)
+    denomrf=refine_by_repeat(denom,rf)
+    #The refined mesh has a shape of (2*nj-1,2*ni-1) rather than (2*nj,2*ni) and hence
+    #is missing the last row/column by construction! 
+    #So, the finest mesh does not have (rf*nj,rf*ni) points but is smaller by ...
+    #Bring it to the same shape as (rf*nj,rf*ni) by padding with zeros.
+    #This is for algorithm convenience and we remove the contribution of them later.
+    xs=extend_by_zeros(Glist[-1].xm,zmrf.shape)
+    ys=extend_by_zeros(Glist[-1].ym,zmrf.shape)
+    zs=extend_by_zeros(Glist[-1].zm,zmrf.shape)
+    #Calculate the vertical distance D of each source point from the least-square plane
+    #Note that the least-square plane passes through the mean data point.
+    #The last rf rows and columns are for padding and denom is not zero on them.
+    #To avoid division by zero calculate denom*D instead
+    D_times_denom=denomrf*(zs-zmrf) - alphdrf*(xs-xmrf) - betadrf*(ys-ymrf)
+    #Calculate topography roughness as the standard deviation of D on each coarse (model) grid cell
+    #This is why we wanted to have a (nj*rf,ni*rf) shape arrays and padded with zeros above.
+    D_times_denom_coarse=np.reshape(D_times_denom,(G.xm.shape[0],rf,G.xm.shape[1],rf))
+    D_times_denom_coarse_std = D_times_denom_coarse.std(axis=(1,3))
+    D_std=np.zeros(G.zm.shape)
+    epsilon=1.0e-20 #To avoid negative underflow
+    D_std[:-1,:-1] = D_times_denom_coarse_std[:-1,:-1]/(denom[:-1,:-1]+epsilon)
 
     print("")
     #print("Writing ...")
     #filename = 'topog_refsamp_BP.nc'+str(b) 
     #write_topog(Glist[0].height,fnam=filename,no_changing_meta=True)
     #print("haigts shape:", lons[b].shape,Hlist[b].shape)
-    return Glist[0].height,Glist[0].h_std,Glist[0].h_min,Glist[0].h_max, hits
+    return Glist[0].height,D_std,Glist[0].h_min,Glist[0].h_max, hits
 
 
 def usage(scriptbasename):
@@ -220,6 +271,7 @@ def usage(scriptbasename):
 
 def main(argv):
     import socket
+    import time
     host = str(socket.gethostname())
     scriptpath = sys.argv[0]
     scriptbasename = subprocess.check_output("basename "+ scriptpath,shell=True).decode('ascii').rstrip("\n")
@@ -284,6 +336,8 @@ def main(argv):
         source =  source + scriptpath + " had git hash " + scriptgithash + scriptgitMod 
         source =  source + ". To obtain the grid generating code do: git clone  https://github.com/nikizadehgfdl/thin-wall-topography.git ; cd thin-wall-topography;  git checkout "+scriptgithash
 
+    #Time it
+    tic = time.perf_counter()
     # # Open and read the topographic dataset
     # Open a topography dataset, check that the topography is on a uniform grid.
     topo_data = netCDF4.Dataset(url)
@@ -366,6 +420,8 @@ def main(argv):
     #Niki: Why isn't h periodic in x?  I.e., height_refsamp[:,0] != height_refsamp[:,-1]
     print(" Periodicity test  : ", height_refsamp[0,0] , height_refsamp[0,-1])
     print(" Periodicity break : ", (np.abs(height_refsamp[:,0]- height_refsamp[:,-1])).max() )
+    toc = time.perf_counter()
+    print(outputfilename, f"It took {toc - tic:0.4f} seconds on platform ",host)
 
     if(plotem):
         import matplotlib.pyplot as plt

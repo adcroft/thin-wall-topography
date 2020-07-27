@@ -2,6 +2,11 @@
 
 import numpy as np
 
+def fourPointAve(x):
+    xave = np.copy(x[::2,::2])
+    xave[:-1,:-1]=0.25*(x[:-1:2,:-1:2]+x[1::2,1::2]+x[1::2,0:-1:2]+x[0:-1:2,1::2])
+    return xave
+
 def is_mesh_uniform(lon,lat):
     """Returns True if the input grid (lon,lat) is uniform and False otherwise"""
     def compare(array):
@@ -144,7 +149,7 @@ class GMesh:
         """Returns new Mesh instance with twice the resolution"""
 
         def local_refine(A):
-            """Retruns a refined variable a with shape (2*nj+1,2*ni+1) by linearly interpolation A with shape (nj+1,ni+1)."""
+            """Retruns a refined variable a with shape (2*nj-1,2*ni-1) by linearly interpolation A with shape (nj,ni)."""
             nj,ni = A.shape
             a = np.zeros( (2*nj-1,2*ni-1) )
             a[::2,::2] = A[:,:] # Shared nodes
@@ -204,13 +209,6 @@ class GMesh:
                                            + self.height[1::2,0:-1:2]
                                            + self.height[0:-1:2,1::2])
 
-        coarser_mesh.h_std = np.zeros(coarser_mesh.height.shape)
-        coarser_mesh.h_std[:-1,:-1] =((coarser_mesh.height[:-1,:-1] - self.height[:-1:2,:-1:2])**2 
-                                    + (coarser_mesh.height[:-1,:-1] - self.height[1::2,1::2]  )**2 
-                                    + (coarser_mesh.height[:-1,:-1] - self.height[1::2,0:-1:2])**2 
-                                    + (coarser_mesh.height[:-1,:-1] - self.height[0:-1:2,1::2])**2) / 4 #Or 3 ??
-        coarser_mesh.h_std=np.sqrt(coarser_mesh.h_std)
-
         coarser_mesh.h_min = np.copy(self.height[::2,::2])
         coarser_mesh.h_min[:-1,:-1] = np.minimum(self.height[:-1:2,:-1:2],self.height[1::2,1::2])
         coarser_mesh.h_min[:-1,:-1] = np.minimum(coarser_mesh.h_min[:-1,:-1],self.height[1::2,0:-1:2])
@@ -220,6 +218,16 @@ class GMesh:
         coarser_mesh.h_max[:-1,:-1] = np.maximum(self.height[:-1:2,:-1:2],self.height[1::2,1::2])
         coarser_mesh.h_max[:-1,:-1] = np.maximum(coarser_mesh.h_max[:-1,:-1],self.height[1::2,0:-1:2])
         coarser_mesh.h_max[:-1,:-1] = np.maximum(coarser_mesh.h_max[:-1,:-1],self.height[0:-1:2,1::2])
+
+        coarser_mesh.h_std = np.zeros(coarser_mesh.height.shape)
+        coarser_mesh.zm = coarser_mesh.height
+        coarser_mesh.xm = fourPointAve(self.xm)
+        coarser_mesh.ym = fourPointAve(self.ym)
+        coarser_mesh.xxm = fourPointAve(self.xxm)
+        coarser_mesh.yym = fourPointAve(self.yym)
+        coarser_mesh.xym = fourPointAve(self.xym)
+        coarser_mesh.xzm = fourPointAve(self.xzm)
+        coarser_mesh.yzm = fourPointAve(self.yzm)
 
     def mdist(x1,x2):
         """Returns positive distance modulo 360."""
@@ -303,6 +311,24 @@ class GMesh:
         self.h_std = np.zeros(self.lon.shape)
         self.h_min = np.zeros(self.lon.shape)
         self.h_max = np.zeros(self.lon.shape)
+	# Quantities needed for calculating the roughness
+        self.xm = np.zeros(self.lon.shape)
+        self.ym = np.zeros(self.lon.shape)
+        self.zm = np.zeros(self.lon.shape)
+        self.xxm = np.zeros(self.lon.shape)
+        self.yym = np.zeros(self.lon.shape)
+        self.xym = np.zeros(self.lon.shape)
+        self.xzm = np.zeros(self.lon.shape)
+        self.yzm = np.zeros(self.lon.shape)
+        self.xm[:,:] = xs[i[:]]
+        self.ym[:,:] = ys[j[:]]
+        self.zm[:,:] = zs[j[:],i[:]]
+        self.xxm[:,:] = self.xm[:,:] * self.xm[:,:]
+        self.yym[:,:] = self.ym[:,:] * self.ym[:,:]
+        self.xym[:,:] = self.xm[:,:] * self.ym[:,:]
+        self.xzm[:,:] = self.xm[:,:] * self.zm[:,:]
+        self.yzm[:,:] = self.ym[:,:] * self.zm[:,:]
+
         return
 
     def least_square_plane_estimate(self, xs,ys,zs):
@@ -394,11 +420,11 @@ class GMesh:
                 xm=np.sum(X)/N
                 ym=np.sum(Y)/N
                 zm=np.sum(Z)/N
-                sxx=np.dot(X,X)/N
-                syy=np.dot(Y,Y)/N
-                sxy=np.dot(X,Y)/N
-                syz=np.dot(Y,Z)/N
-                sxz=np.dot(X,Z)/N
+                sxx=np.dot(X-xm,X-xm)#/N
+                syy=np.dot(Y-ym,Y-ym)#/N
+                sxy=np.dot(X-xm,Y-ym)#/N
+                syz=np.dot(Y-ym,Z-zm)#/N
+                sxz=np.dot(X-xm,Z-zm)#/N
                 
                 det=(sxx*syy-sxy*sxy)
                 if(abs(det) < epsilon): #No solutions

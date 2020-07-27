@@ -331,7 +331,7 @@ def main(argv):
     print(" Periodicity test  : ", hmean_[0,0] , hmean_[0,-1])
     print(" Periodicity break : ", (np.abs(hmean_[:,0]- hmean_[:,-1])).max() )
     toc = time.perf_counter()
-    print(f"It took {toc - tic:0.4f} seconds")
+    print(outputfilename, f"It took {toc - tic:0.4f} seconds on platform ",host)
     if(plotem):
         import matplotlib.pyplot as plt
         import pylab as pl
