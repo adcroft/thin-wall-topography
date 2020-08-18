@@ -215,7 +215,7 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
     for i in reversed(range(1,len(Glist))):   # 1, makes it stop at element 1 rather than 0
         Glist[i].coarsenby2(Glist[i-1])
     
-    print("Roughness calculation")
+    print("Roughness calculation via plane fit")
     #Roughness calculation by plane fitting
     #Calculate the slopes of the planes on the coarsest (model) grid cells
     G=Glist[0]
@@ -255,7 +255,7 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
     D_times_denom_coarse_std = D_times_denom_coarse.std(axis=(1,3))
     D_std=np.zeros(G.zm.shape)
     epsilon=1.0e-20 #To avoid negative underflow
-    D_std[:-1,:-1] = D_times_denom_coarse_std[:-1,:-1]/(denom[:-1,:-1]+epsilon)
+    D_std[:,:] = D_times_denom_coarse_std[:,:]/(denom[:,:]+epsilon)
 
     print("")
     #print("Writing ...")
@@ -421,7 +421,7 @@ def main(argv):
     print(" Periodicity test  : ", height_refsamp[0,0] , height_refsamp[0,-1])
     print(" Periodicity break : ", (np.abs(height_refsamp[:,0]- height_refsamp[:,-1])).max() )
     toc = time.perf_counter()
-    print(outputfilename, f"It took {toc - tic:0.4f} seconds on platform ",host)
+    print("It took {toc - tic:0.4f} seconds on platform ",host)
 
     if(plotem):
         import matplotlib.pyplot as plt
