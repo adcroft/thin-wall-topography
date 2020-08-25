@@ -2,6 +2,11 @@
 
 import numpy as np
 
+def fourPointAve(x):
+    xave = np.copy(x[::2,::2])
+    xave[:-1,:-1]=0.25*(x[:-1:2,:-1:2]+x[1::2,1::2]+x[1::2,0:-1:2]+x[0:-1:2,1::2])
+    return xave
+
 def is_mesh_uniform(lon,lat):
     """Returns True if the input grid (lon,lat) is uniform and False otherwise"""
     def compare(array):
@@ -144,7 +149,7 @@ class GMesh:
         """Returns new Mesh instance with twice the resolution"""
 
         def local_refine(A):
-            """Retruns a refined variable a with shape (2*nj+1,2*ni+1) by linearly interpolation A with shape (nj+1,ni+1)."""
+            """Retruns a refined variable a with shape (2*nj-1,2*ni-1) by linearly interpolation A with shape (nj,ni)."""
             nj,ni = A.shape
             a = np.zeros( (2*nj-1,2*ni-1) )
             a[::2,::2] = A[:,:] # Shared nodes
@@ -204,13 +209,6 @@ class GMesh:
                                            + self.height[1::2,0:-1:2]
                                            + self.height[0:-1:2,1::2])
 
-        coarser_mesh.h_std = np.zeros(coarser_mesh.height.shape)
-        coarser_mesh.h_std[:-1,:-1] =((coarser_mesh.height[:-1,:-1] - self.height[:-1:2,:-1:2])**2 
-                                    + (coarser_mesh.height[:-1,:-1] - self.height[1::2,1::2]  )**2 
-                                    + (coarser_mesh.height[:-1,:-1] - self.height[1::2,0:-1:2])**2 
-                                    + (coarser_mesh.height[:-1,:-1] - self.height[0:-1:2,1::2])**2) / 4 #Or 3 ??
-        coarser_mesh.h_std=np.sqrt(coarser_mesh.h_std)
-
         coarser_mesh.h_min = np.copy(self.height[::2,::2])
         coarser_mesh.h_min[:-1,:-1] = np.minimum(self.height[:-1:2,:-1:2],self.height[1::2,1::2])
         coarser_mesh.h_min[:-1,:-1] = np.minimum(coarser_mesh.h_min[:-1,:-1],self.height[1::2,0:-1:2])
@@ -220,6 +218,16 @@ class GMesh:
         coarser_mesh.h_max[:-1,:-1] = np.maximum(self.height[:-1:2,:-1:2],self.height[1::2,1::2])
         coarser_mesh.h_max[:-1,:-1] = np.maximum(coarser_mesh.h_max[:-1,:-1],self.height[1::2,0:-1:2])
         coarser_mesh.h_max[:-1,:-1] = np.maximum(coarser_mesh.h_max[:-1,:-1],self.height[0:-1:2,1::2])
+
+        coarser_mesh.h_std = np.zeros(coarser_mesh.height.shape)
+        coarser_mesh.zm = coarser_mesh.height
+        coarser_mesh.xm = fourPointAve(self.xm)
+        coarser_mesh.ym = fourPointAve(self.ym)
+        coarser_mesh.xxm = fourPointAve(self.xxm)
+        coarser_mesh.yym = fourPointAve(self.yym)
+        coarser_mesh.xym = fourPointAve(self.xym)
+        coarser_mesh.xzm = fourPointAve(self.xzm)
+        coarser_mesh.yzm = fourPointAve(self.yzm)
 
     def mdist(x1,x2):
         """Returns positive distance modulo 360."""
@@ -243,6 +251,7 @@ class GMesh:
 #neither works for bipole
 
         if abs( (lon[-1]-lon[0])-360 )<=360.*np.finfo( lon.dtype ).eps:
+            print("Detected repeated longitude ",lon[0],lon[-1])
             sni-=1 # Account for repeated longitude
         # Nearest integer (the upper one if equidistant)
         nn_i = np.floor(np.mod(self.lon-lon[0]+0.5*dellon,360)/dellon)
@@ -302,5 +311,139 @@ class GMesh:
         self.h_std = np.zeros(self.lon.shape)
         self.h_min = np.zeros(self.lon.shape)
         self.h_max = np.zeros(self.lon.shape)
+	# Quantities needed for calculating the roughness
+        self.xm = np.zeros(self.lon.shape)
+        self.ym = np.zeros(self.lon.shape)
+        self.zm = np.zeros(self.lon.shape)
+        self.xxm = np.zeros(self.lon.shape)
+        self.yym = np.zeros(self.lon.shape)
+        self.xym = np.zeros(self.lon.shape)
+        self.xzm = np.zeros(self.lon.shape)
+        self.yzm = np.zeros(self.lon.shape)
+        self.xm[:,:] = xs[i[:]]
+        self.ym[:,:] = ys[j[:]]
+        self.zm[:,:] = zs[j[:],i[:]]
+        self.xxm[:,:] = self.xm[:,:] * self.xm[:,:]
+        self.yym[:,:] = self.ym[:,:] * self.ym[:,:]
+        self.xym[:,:] = self.xm[:,:] * self.ym[:,:]
+        self.xzm[:,:] = self.xm[:,:] * self.zm[:,:]
+        self.yzm[:,:] = self.ym[:,:] * self.zm[:,:]
+
         return
+
+    def least_square_plane_estimate(self, xs,ys,zs):
+        """This function returns the estimates for h2 and h and also mean,min,max of the date
+           in each grid cell. """
+        """It estimates h and h2 passing a least-square plane through the data points in each grid cell."""
+        """The plane is calculated via a standard algorithm explained in text books (T. Shifrin, Multivariable Mathematic, p227)"""
+        """h2 is estiamted as the standard deviation of z-distance of data points in the grid cell from the fit plane."""
+        """h  is estiamted as the value of plane for z calculated at the corner of the grid cell."""
+
+        epsilon=1.0e-5
+        #indices of nearest neighbor source point to each target mesh point 
+        ti,tj = self.find_nn_uniform_source(xs,ys)
+        
+        #Initialize with nans as missing values
+        #This will leave some mesh point values as nans
+        Zmean=np.empty(self.lon.shape)*np.nan
+        Zmin =np.empty(self.lon.shape)*np.nan
+        Zmax =np.empty(self.lon.shape)*np.nan
+        Zstd =np.empty(self.lon.shape)*np.nan
+
+        #Loop over each grid cell. Is there a numpy way of doing this?
+        dlon=np.roll(self.lon,shift=-1,axis=1)-self.lon
+        dlat=np.roll(self.lat,shift=-1,axis=0)-self.lat
+        dti =np.roll(ti,shift=-1,axis=1)-ti
+        dtj =np.roll(tj,shift=-1,axis=0)-tj
+        #fix the last elements #halo?
+        dlon[:,-1]=dlon[:,-2] 
+        dlat[-1,:]=dlat[-2,:] 
+        dti[:,-1]=dti[:,-2] 
+        #print(dtj)
+        dtj[-1,:]=dtj[-2,:] 
+        #print(dtj)
+        for J in range(0,self.lat.shape[0]):
+            for I in range(0,self.lon.shape[1]): 
+                #Initialize to the NN source value. Reasonable?
+                znn=zs[tj[J,I],ti[J,I]]
+                Zmean[J,I]= znn
+                Zmin[J,I] = znn
+                Zmax[J,I] = znn
+                Zstd[J,I] = 0.0
+                
+                #bounds of a target cell
+                lon_min=self.lon[J,I]
+                lon_max=lon_min+dlon[J,I]
+                lat_min=self.lat[J,I]
+                lat_max=lat_min+dlat[J,I]
+                #bounds of indexes of NN source cell
+                tj_min=tj[J,I]
+                tj_max=tj_min+dtj[J,I]
+                ti_min=ti[J,I]
+                ti_max=ti_min+dti[J,I]
+                ti_max=min(ti_max,xs.shape[0]-1)
+                tj_max=min(tj_max,ys.shape[0]-1)
+                #We don't know how many data points are in each grid cell. Let's say it's M.
+                #According to the algorithm, we need to create 
+                X=[]
+                Y=[]
+                Z=[]
+                #print('J,I ',J,I)
+                #print(lon_min,lon_max)
+                #print(ti_min,ti_max)
+                #print(lat_min,lat_max)
+                #print(tj_min,tj_max,dtj[J,I])
+                for jj in range(tj_min,tj_max+1):
+                    #print(ys[jj],lat_min,lat_max)
+                    if((ys[jj]>=lat_min) and (ys[jj]<lat_max)):
+                        for ii in range(ti_min,ti_max+1):
+                            if(xs[ii] >= lon_min and xs[ii] < lon_max):
+                                #print('jj,ii',jj,ii)
+                                X.append(np.array(xs[ii]))
+                                Y.append(np.array(ys[jj]))
+                                Z.append(np.array(zs[jj,ii]))
+                #print(len(Z))
+                if(len(Z)==0):
+                    continue
+                #cast these in numpy arrays
+                X = np.asarray(X) 
+                Y = np.asarray(Y)
+                Z = np.asarray(Z)
+                #The algorithm fits a plane z=P(x,y) by minimizing \sum_i (z_i - P(x_i,y_i)) 
+                #It shows that
+                #1. P is of the form P = zm + ax*(x-xm) + ay*(y-ym), 
+                #                    xm,ym,zm being the means of data x_i,y_i,z_i respectively
+                #     I.e., the least square plane passes through the point (xm,ym,zm)
+                #2. It gives the following formula for ax and ay (solution of 2by2 linear system)
+                
+                N=X.size
+                xm=np.sum(X)/N
+                ym=np.sum(Y)/N
+                zm=np.sum(Z)/N
+                sxx=np.dot(X-xm,X-xm)#/N
+                syy=np.dot(Y-ym,Y-ym)#/N
+                sxy=np.dot(X-xm,Y-ym)#/N
+                syz=np.dot(Y-ym,Z-zm)#/N
+                sxz=np.dot(X-xm,Z-zm)#/N
+                
+                det=(sxx*syy-sxy*sxy)
+                if(abs(det) < epsilon): #No solutions
+                    continue
+                ax=(sxz*syy-syz*sxy)/det
+                ay=(syz*sxx-sxz*sxy)/det
+                d=Z-zm - ax*(X-xm) - ay*(Y-ym)
+                
+                Zstd[J,I]=d.std()
+                #Zij[J,I] = zm + ax*(self.lon[J,I]-xm)+ay*(self.lat[J,I]-ym) #corner fit value
+                Zmean[J,I]= zm
+                Zmin[J,I] = Z.min()
+                Zmax[J,I] = Z.max()
+
+                #Check: The sum of Distances must be very small, almost zero
+                #assert abs(d.sum())<0.00001, "Bad fit: The sum of Distances is large at "+str(I)+","+str(J)+" = "+str(d.sum())+" compared to min  "+str(Zmin[J,I])
+                if(abs(d.sum())>epsilon):
+                    print("Bad fit: The sum of Distances is large at ("+str(I)+","+str(J)+") = "+str(d.sum())+" compared to min  "+str(Zmin[J,I]))
+
+        return Zstd,Zmean,Zmin,Zmax
+
 

@@ -7,7 +7,7 @@ import imp
 import netCDF4
 import numpy as np
 
-def write_topog(h,hstd,hmin,hmax,fnam=None,format='NETCDF3_CLASSIC',description=None,history=None,source=None,no_changing_meta=None):
+def write_topog(h,hstd,hmin,hmax,hx,hy,fnam=None,format='NETCDF3_CLASSIC',description=None,history=None,source=None,no_changing_meta=None):
     import netCDF4 as nc
 
     if fnam is None:
@@ -22,19 +22,34 @@ def write_topog(h,hstd,hmin,hmax,fnam=None,format='NETCDF3_CLASSIC',description=
     ntiles=fout.createDimension('ntiles',1)
     depth=fout.createVariable('depth','f8',('ny','nx'))
     depth.units='meters'
+    depth.description = 'Non-negative nominal thickness of the ocean at cell centers'
     depth[:]=-h
     height=fout.createVariable('height','f8',('ny','nx'))
     height.units='meters'
+    height.description = 'Mean topography height data at grid cell'
     height[:]=h
-    h_std=fout.createVariable('std','f8',('ny','nx'))
+    h2=fout.createVariable('h2','f8',('ny','nx'))
+    h2.units='meters^2'
+    h2.standard_name = 'Variance of sub-grid scale topography'
+    h2[:]=hstd[:]*hstd[:]
+    h_std=fout.createVariable('h_std','f8',('ny','nx'))
     h_std.units='meters'
+    h_std.standard_name = 'Standard deviation of sub-grid scale topography'
     h_std[:]=hstd
     h_min=fout.createVariable('h_min','f8',('ny','nx'))
     h_min.units='meters'
+    h_min.description = 'Minimum topography height data at grid cell'
     h_min[:]=hmin
     h_max=fout.createVariable('h_max','f8',('ny','nx'))
     h_max.units='meters'
+    h_max.description = 'Maximum topography height data at grid cell'
     h_max[:]=hmax
+    h_x=fout.createVariable('x','f8',('ny','nx'))
+    h_x.units='degrees'
+    h_x[:]=hx
+    h_y=fout.createVariable('y','f8',('ny','nx'))
+    h_y.units='degrees'
+    h_y[:]=hy
 #    string=fout.createDimension('string',255)    
 #    tile=fout.createVariable('tile','S1',('string'))
 #    tile[0]='t'
@@ -127,6 +142,8 @@ def main(argv):
     h_stds = []
     h_mins = []
     h_maxs = []
+    h_xs = []
+    h_ys = []
     for tilefile in tiles:
         print(" Reading ", tilefile)
         tiledata = netCDF4.Dataset(tilefile)
@@ -134,6 +151,8 @@ def main(argv):
         h_stds.append(np.array(tiledata.variables['h_std'][:]))
         h_mins.append(np.array(tiledata.variables['h_min'][:]))
         h_maxs.append(np.array(tiledata.variables['h_max'][:]))
+        h_xs.append(np.array(tiledata.variables['x'][:]))
+        h_ys.append(np.array(tiledata.variables['y'][:]))
 
     height=heights[0]
     cats = 0 #count number of joins
@@ -155,6 +174,12 @@ def main(argv):
     for h in h_stds[1:] :
         h_std = np.concatenate((h_std[:-1,:],h),axis=0)    
 
+    h_x=h_xs[0]
+    for h in h_xs[1:] :
+        h_x = np.concatenate((h_x[:-1,:],h),axis=0)    
+    h_y=h_ys[0]
+    for h in h_ys[1:] :
+        h_y = np.concatenate((h_y[:-1,:],h),axis=0)    
     #This is on supergrid. Topography is needed on tracer cells. 
     #Sample every other point to get it. 
     #Drop the last x (corresponds to x0+360)  and y (why?)
@@ -169,7 +194,11 @@ def main(argv):
     h_max = np.maximum(h_max[:-1:2,:-1:2],h_max[1::2,1::2])
     h_min = np.minimum(h_min[:-1:2,:-1:2],h_min[1::2,1::2])
 
-    write_topog(height,h_std,h_min,h_max,fnam=outputfilename,description=desc,history=hist,source=source,no_changing_meta=no_changing_meta)
+    h_x = h_x[:-1:2,::2]
+    h_y = h_y[:-1:2,::2]
+
+    print("shapes: ",h_min.shape,h_x.shape,h_y.shape)
+    write_topog(height,h_std,h_min,h_max,h_x,h_y,fnam=outputfilename,description=desc,history=hist,source=source,no_changing_meta=no_changing_meta)
 
 
 if __name__ == "__main__":
