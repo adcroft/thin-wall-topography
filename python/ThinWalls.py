@@ -729,3 +729,69 @@ class ThinWalls(GMesh):
     def plot_grid(self, axis, *args, **kwargs):
         """Plots ThinWalls mesh."""
         super().plot(axis, *args, **kwargs)
+    def set_edge_to_step_mean(self, tripolar=False):
+        """Set elevation of cell edges to step topography."""
+        tmp = numpy.ma.zeros(self.shapeu)
+        tmp[:,1:-1] = ( self.c_simple.ave[:,:-1] + self.c_simple.ave[:,1:] ) / 2
+        if tripolar:
+            bnd_w = ( self.c_simple.ave[:,0] + self.c_simple.ave[:,-1] ) / 2
+            tmp[:,0] = bnd_w
+            tmp[:,-1] = bnd_w
+        else:
+            tmp[:,0] = self.c_simple.ave[:,0]
+            tmp[:,-1] = self.c_simple.ave[:,-1]
+        self.u_simple.set_equal( tmp )
+        tmp = numpy.ma.zeros(self.shapev)
+        tmp[1:-1,:] = ( self.c_simple.ave[:-1,:] + self.c_simple.ave[1:,:] ) / 2
+        tmp[0,:] = self.c_simple.ave[0,:]
+        if tripolar:
+             bnd_n = ( self.c_simple.ave[-1,:self.ni//2] + self.c_simple.ave[-1,self.ni//2:][::-1] ) / 2
+             tmp[-1,:] = numpy.ma.mr_[bnd_n, bnd_n[::-1]]
+        else:
+            tmp[-1,:] = self.c_simple.ave[-1,:]
+        tmp[0,:] = self.c_simple.ave[0,:]
+        self.v_simple.set_equal( tmp )
+    def set_edge_to_step_max(self, tripolar=False):
+        """Set elevation of cell edges to step topography."""
+        tmp = numpy.ma.zeros(self.shapeu)
+        tmp[:,1:-1] = numpy.maximum( self.c_simple.ave[:,:-1], self.c_simple.ave[:,1:] )
+        if tripolar:
+            bnd_w = numpy.maximum( self.c_simple.ave[:,0], self.c_simple.ave[:,-1] )
+            tmp[:,0] = bnd_w
+            tmp[:,-1] = bnd_w
+        else:
+            tmp[:,0] = self.c_simple.ave[:,0]
+            tmp[:,-1] = self.c_simple.ave[:,-1]
+        self.u_simple.set_equal( tmp )
+        tmp = numpy.ma.zeros(self.shapev)
+        tmp[1:-1,:] = numpy.maximum( self.c_simple.ave[:-1,:], self.c_simple.ave[1:,:] )
+        tmp[0,:] = self.c_simple.ave[0,:]
+        if tripolar:
+             bnd_n = numpy.maximum( self.c_simple.ave[-1,:self.ni//2], self.c_simple.ave[-1,self.ni//2:][::-1] )
+             tmp[-1,:] = numpy.ma.mr_[bnd_n, bnd_n[::-1]]
+        else:
+            tmp[-1,:] = self.c_simple.ave[-1,:]
+        tmp[0,:] = self.c_simple.ave[0,:]
+        self.v_simple.set_equal( tmp )
+    def set_edge_to_step_min(self, tripolar=False):
+        """Set elevation of cell edges to step topography."""
+        tmp = numpy.ma.zeros(self.shapeu)
+        tmp[:,1:-1] = numpy.minimum( self.c_simple.ave[:,:-1], self.c_simple.ave[:,1:] )
+        if tripolar:
+            bnd_w = numpy.minimum( self.c_simple.ave[:,0], self.c_simple.ave[:,-1] )
+            tmp[:,0] = bnd_w
+            tmp[:,-1] = bnd_w
+        else:
+            tmp[:,0] = self.c_simple.ave[:,0]
+            tmp[:,-1] = self.c_simple.ave[:,-1]
+        self.u_simple.set_equal( tmp )
+        tmp = numpy.ma.zeros(self.shapev)
+        tmp[1:-1,:] = numpy.minimum( self.c_simple.ave[:-1,:], self.c_simple.ave[1:,:] )
+        tmp[0,:] = self.c_simple.ave[0,:]
+        if tripolar:
+            bnd_n = numpy.minimum( self.c_simple.ave[-1,:self.ni//2], self.c_simple.ave[-1,self.ni//2:][::-1] )
+            tmp[-1,:] = numpy.ma.mr_[bnd_n, bnd_n[::-1]]
+        else:
+            tmp[-1,:] = self.c_simple.ave[-1,:]
+        tmp[0,:] = self.c_simple.ave[0,:]
+        self.v_simple.set_equal( tmp )
