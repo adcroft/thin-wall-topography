@@ -467,7 +467,7 @@ class ThinWalls(GMesh):
         C.low[J+1,I+1] = numpy.minimum( C.low[J+1,I+1], d_nw[j,i] )
         # Outer edges
         new_ridge = numpy.minimum( r_ne, r_sw )
-        V.low[J+2,I+1] = numpy.maximum( V.low[J+1,I+1], r_ne[j,i] )
+        V.low[J+2,I+1] = numpy.maximum( V.low[J+2,I+1], r_ne[j,i] )
         U.low[J+1,I+2] = numpy.maximum( U.low[J+1,I+2], r_ne[j,i] )
         U.low[J,I+2] = numpy.maximum( U.low[J,I+2], new_ridge[j,i] )
         V.low[J,I+1] = numpy.maximum( V.low[J,I+1], new_ridge[j,i] )
@@ -488,39 +488,55 @@ class ThinWalls(GMesh):
         C.low[J+1,I+1] = numpy.minimum( C.low[J+1,I+1], d_ne[j,i] )
         # Outer edges
         new_ridge = numpy.minimum( r_nw, r_se )
-        V.low[J+2,I] = numpy.maximum( V.low[J+1,I], r_nw[j,i] )
+        V.low[J+2,I] = numpy.maximum( V.low[J+2,I], r_nw[j,i] )
         U.low[J+1,I] = numpy.maximum( U.low[J+1,I], r_nw[j,i] )
         U.low[J,I] = numpy.maximum( U.low[J,I], new_ridge[j,i] )
         V.low[J,I] = numpy.maximum( V.low[J,I], new_ridge[j,i] )
         V.low[J,I+1] = numpy.maximum( V.low[J,I+1], r_se[j,i] )
         U.low[J,I+2] = numpy.maximum( U.low[J,I+2], r_se[j,i] )
         print("  NE: ", nej.size, " inverted")
-    def diagnose_EW_pathway(self):
+    def diagnose_EW_pathway(self, measure='effective'):
         """Returns deepest EW pathway"""
-        wn_to_en, wn_to_es, ws_to_en, ws_to_es = self.diagnose_EW_pathways()
+        wn_to_en, wn_to_es, ws_to_en, ws_to_es = self.diagnose_EW_pathways(measure=measure)
         wn = numpy.minimum( wn_to_en, wn_to_es)
         ws = numpy.minimum( ws_to_en, ws_to_es)
         return numpy.minimum( wn, ws)
-    def diagnose_EW_pathways(self):
+    def diagnose_EW_pathways(self, measure='effective'):
         """Returns deepest EW pathway"""
-        self.u_effective.transpose()
-        self.v_effective.transpose()
-        self.u_effective,self.v_effective = self.v_effective,self.u_effective
-        wn_to_en, wn_to_es, ws_to_en, ws_to_es = self.diagnose_NS_pathways()
-        self.u_effective.transpose()
-        self.v_effective.transpose()
-        self.u_effective,self.v_effective = self.v_effective,self.u_effective
+        if measure == 'effective':
+            self.u_effective.transpose()
+            self.v_effective.transpose()
+            self.u_effective,self.v_effective = self.v_effective,self.u_effective
+        elif measure == 'simple':
+            self.u_simple.transpose()
+            self.v_simple.transpose()
+            self.u_simple,self.v_simple = self.v_simple,self.u_simple
+        else: raise Exception('Unknown "measure"')
+        wn_to_en, wn_to_es, ws_to_en, ws_to_es = self.diagnose_NS_pathways(measure=measure)
+        if measure == 'effective':
+            self.u_effective.transpose()
+            self.v_effective.transpose()
+            self.u_effective,self.v_effective = self.v_effective,self.u_effective
+        elif measure == 'simple':
+            self.u_simple.transpose()
+            self.v_simple.transpose()
+            self.u_simple,self.v_simple = self.v_simple,self.u_simple
+        else: raise Exception('Unknown "measure"')
         return wn_to_en.T, wn_to_es.T, ws_to_en.T, ws_to_es.T
-    def diagnose_NS_pathway(self):
+    def diagnose_NS_pathway(self, measure='effective'):
         """Returns deepest NS pathway"""
-        se_to_ne, se_to_nw, sw_to_ne, sw_to_nw = self.diagnose_NS_pathways()
+        se_to_ne, se_to_nw, sw_to_ne, sw_to_nw = self.diagnose_NS_pathways(measure=measure)
         sw = numpy.minimum( sw_to_ne, sw_to_nw)
         se = numpy.minimum( se_to_ne, se_to_nw)
         return numpy.minimum( sw, se)
-    def diagnose_NS_pathways(self):
+    def diagnose_NS_pathways(self, measure='effective'):
         """Returns NS deep pathways"""
         # Alias
-        C,U,V = self.c_effective.low,self.u_effective.low,self.v_effective.low
+        if measure == 'effective':
+            C,U,V = self.c_effective.low,self.u_effective.low,self.v_effective.low
+        elif measure == 'simple':
+            C,U,V = self.c_simple.low,self.u_simple.low,self.v_simple.low
+        else: raise Exception('Unknown "measure"')
 
         # Cell to immediate north-south exit
         ne_exit = V[2::2,1::2]
@@ -582,44 +598,53 @@ class ThinWalls(GMesh):
         j,i = numpy.nonzero( needed & ( w<=e ) ); J,I=2*j,2*i
         U[J,I+2] = numpy.maximum( U[J,I+2], ew_deepest_connection[j,i] )
         U[J+1,I+2] = numpy.maximum( U[J+1,I+2], ew_deepest_connection[j,i] )
-    def diagnose_corner_pathways(self):
+    def diagnose_corner_pathways(self, measure='effective'):
         """Returns deepest corner pathways"""
-        sw = self.diagnose_SW_pathway()
+        sw = self.diagnose_SW_pathway(measure=measure)
         # Alias
-        C, U, V = self.c_effective, self.u_effective, self.v_effective
+        if measure == 'effective':
+            C,U,V = self.c_effective,self.u_effective,self.v_effective
+        elif measure == 'simple':
+            C,U,V = self.c_simple,self.u_simple,self.v_simple
+        else: raise Exception('Unknown "measure"')
+
         # Flip in j direction so j=S, i=E
         C.flip(axis=0)
         U.flip(axis=0)
         V.flip(axis=0)
-        nw = self.diagnose_SW_pathway()
+        nw = self.diagnose_SW_pathway(measure=measure)
         nw = numpy.flip(nw, axis=0)
         # Flip in i direction so j=S, i=W
         C.flip(axis=1)
         U.flip(axis=1)
         V.flip(axis=1)
-        ne = self.diagnose_SW_pathway()
+        ne = self.diagnose_SW_pathway(measure=measure)
         ne = numpy.flip(numpy.flip(ne, axis=0), axis=1)
         # Flip in j direction so j=N, i=W
         C.flip(axis=0)
         U.flip(axis=0)
         V.flip(axis=0)
-        se = self.diagnose_SW_pathway()
+        se = self.diagnose_SW_pathway(measure=measure)
         se = numpy.flip(se, axis=1)
         # Flip in i direction so j=N, i=E
         C.flip(axis=1)
         U.flip(axis=1)
         V.flip(axis=1)
         return sw, se, ne, nw
-    def diagnose_SW_pathway(self):
+    def diagnose_SW_pathway(self, measure='effective'):
         """Returns deepest SW pathway"""
-        sw_to_sw, sw_to_nw, se_to_sw, se_to_nw = self.diagnose_SW_pathways()
+        sw_to_sw, sw_to_nw, se_to_sw, se_to_nw = self.diagnose_SW_pathways(measure=measure)
         sw = numpy.minimum( sw_to_sw, sw_to_nw)
         se = numpy.minimum( se_to_sw, se_to_nw)
         return numpy.minimum( sw, se)
-    def diagnose_SW_pathways(self):
+    def diagnose_SW_pathways(self, measure='effective'):
         """Returns SW deep pathways"""
         # Alias
-        C,U,V = self.c_effective.low,self.u_effective.low,self.v_effective.low
+        if measure == 'effective':
+            C,U,V = self.c_effective.low,self.u_effective.low,self.v_effective.low
+        elif measure == 'simple':
+            C,U,V = self.c_simple.low,self.u_simple.low,self.v_simple.low
+        else: raise Exception('Unknown "measure"')
 
         # Cell to immediate south/west exit
         w_n_exit = U[1::2,:-1:2]
@@ -757,7 +782,7 @@ class ThinWalls(GMesh):
         super().plot(axis, *args, **kwargs)
     def set_edge_to_step_mean(self, tripolar=False):
         """Set elevation of cell edges to step topography."""
-        tmp = numpy.ma.zeros(self.shapeu)
+        tmp = numpy.zeros(self.shapeu)
         tmp[:,1:-1] = ( self.c_simple.ave[:,:-1] + self.c_simple.ave[:,1:] ) / 2
         if tripolar:
             bnd_w = ( self.c_simple.ave[:,0] + self.c_simple.ave[:,-1] ) / 2
@@ -767,19 +792,19 @@ class ThinWalls(GMesh):
             tmp[:,0] = self.c_simple.ave[:,0]
             tmp[:,-1] = self.c_simple.ave[:,-1]
         self.u_simple.set_equal( tmp )
-        tmp = numpy.ma.zeros(self.shapev)
+        tmp = numpy.zeros(self.shapev)
         tmp[1:-1,:] = ( self.c_simple.ave[:-1,:] + self.c_simple.ave[1:,:] ) / 2
         tmp[0,:] = self.c_simple.ave[0,:]
         if tripolar:
              bnd_n = ( self.c_simple.ave[-1,:self.ni//2] + self.c_simple.ave[-1,self.ni//2:][::-1] ) / 2
-             tmp[-1,:] = numpy.ma.mr_[bnd_n, bnd_n[::-1]]
+             tmp[-1,:] = numpy.r_[bnd_n, bnd_n[::-1]]
         else:
             tmp[-1,:] = self.c_simple.ave[-1,:]
         tmp[0,:] = self.c_simple.ave[0,:]
         self.v_simple.set_equal( tmp )
     def set_edge_to_step_max(self, tripolar=False):
         """Set elevation of cell edges to step topography."""
-        tmp = numpy.ma.zeros(self.shapeu)
+        tmp = numpy.zeros(self.shapeu)
         tmp[:,1:-1] = numpy.maximum( self.c_simple.ave[:,:-1], self.c_simple.ave[:,1:] )
         if tripolar:
             bnd_w = numpy.maximum( self.c_simple.ave[:,0], self.c_simple.ave[:,-1] )
@@ -789,19 +814,19 @@ class ThinWalls(GMesh):
             tmp[:,0] = self.c_simple.ave[:,0]
             tmp[:,-1] = self.c_simple.ave[:,-1]
         self.u_simple.set_equal( tmp )
-        tmp = numpy.ma.zeros(self.shapev)
+        tmp = numpy.zeros(self.shapev)
         tmp[1:-1,:] = numpy.maximum( self.c_simple.ave[:-1,:], self.c_simple.ave[1:,:] )
         tmp[0,:] = self.c_simple.ave[0,:]
         if tripolar:
              bnd_n = numpy.maximum( self.c_simple.ave[-1,:self.ni//2], self.c_simple.ave[-1,self.ni//2:][::-1] )
-             tmp[-1,:] = numpy.ma.mr_[bnd_n, bnd_n[::-1]]
+             tmp[-1,:] = numpy.r_[bnd_n, bnd_n[::-1]]
         else:
             tmp[-1,:] = self.c_simple.ave[-1,:]
         tmp[0,:] = self.c_simple.ave[0,:]
         self.v_simple.set_equal( tmp )
     def set_edge_to_step_min(self, tripolar=False):
         """Set elevation of cell edges to step topography."""
-        tmp = numpy.ma.zeros(self.shapeu)
+        tmp = numpy.zeros(self.shapeu)
         tmp[:,1:-1] = numpy.minimum( self.c_simple.ave[:,:-1], self.c_simple.ave[:,1:] )
         if tripolar:
             bnd_w = numpy.minimum( self.c_simple.ave[:,0], self.c_simple.ave[:,-1] )
@@ -811,12 +836,12 @@ class ThinWalls(GMesh):
             tmp[:,0] = self.c_simple.ave[:,0]
             tmp[:,-1] = self.c_simple.ave[:,-1]
         self.u_simple.set_equal( tmp )
-        tmp = numpy.ma.zeros(self.shapev)
+        tmp = numpy.zeros(self.shapev)
         tmp[1:-1,:] = numpy.minimum( self.c_simple.ave[:-1,:], self.c_simple.ave[1:,:] )
         tmp[0,:] = self.c_simple.ave[0,:]
         if tripolar:
             bnd_n = numpy.minimum( self.c_simple.ave[-1,:self.ni//2], self.c_simple.ave[-1,self.ni//2:][::-1] )
-            tmp[-1,:] = numpy.ma.mr_[bnd_n, bnd_n[::-1]]
+            tmp[-1,:] = numpy.r_[bnd_n, bnd_n[::-1]]
         else:
             tmp[-1,:] = self.c_simple.ave[-1,:]
         tmp[0,:] = self.c_simple.ave[0,:]
