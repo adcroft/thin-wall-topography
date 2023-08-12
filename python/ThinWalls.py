@@ -116,6 +116,7 @@ class ThinWalls(GMesh):
         copy.c_effective = self.c_effective.copy()
         copy.u_effective = self.u_effective.copy()
         copy.v_effective = self.v_effective.copy()
+        return copy
     def copy(self):
         """Returns new instance with copied values"""
         return self.__copy__()
@@ -380,10 +381,14 @@ class ThinWalls(GMesh):
         C,U,V = self.c_effective,self.u_effective,self.v_effective
         print("Begin invert_exterior_corners")
         # Exterior deep corners
-        d_sw = numpy.maximum( U.low[::2,:-1:2], V.low[:-1:2,::2] )
-        d_se = numpy.maximum( U.low[::2,2::2], V.low[:-1:2,1::2] )
-        d_nw = numpy.maximum( U.low[1::2,:-1:2], V.low[2::2,::2] )
-        d_ne = numpy.maximum( U.low[1::2,2::2], V.low[2::2,1::2] )
+        # d_sw = numpy.maximum( U.low[::2,:-1:2], V.low[:-1:2,::2] )
+        # d_se = numpy.maximum( U.low[::2,2::2], V.low[:-1:2,1::2] )
+        # d_nw = numpy.maximum( U.low[1::2,:-1:2], V.low[2::2,::2] )
+        # d_ne = numpy.maximum( U.low[1::2,2::2], V.low[2::2,1::2] )
+        d_sw = numpy.minimum( U.low[::2,:-1:2], V.low[:-1:2,::2] )
+        d_se = numpy.minimum( U.low[::2,2::2], V.low[:-1:2,1::2] )
+        d_nw = numpy.minimum( U.low[1::2,:-1:2], V.low[2::2,::2] )
+        d_ne = numpy.minimum( U.low[1::2,2::2], V.low[2::2,1::2] )
         oppo = numpy.minimum( d_ne, numpy.minimum( d_nw, d_se ) )
         # Interior sills
         s_sw = numpy.minimum( U.low[::2,1::2], V.low[1::2,::2] )
