@@ -773,14 +773,14 @@ class ThinWalls(GMesh):
             tmp[1::2,::2] = u
             tmp[::2,1::2] = v
             return axis.pcolormesh(lon, lat, tmp, *args, **kwargs)
-        if measure == 'simple':
+        if measure=='simple':
             c,u,v = self.c_simple, self.u_simple, self.v_simple
-        elif measure == 'effective':
+        elif measure=='effective':
             c,u,v = self.c_effective, self.u_effective, self.v_effective
         else: raise Exception('Unknown "measure"')
-        if metric == 'mean': return pcol_elev( c.ave, u.ave, v.ave )
-        elif metric == 'min': return pcol_elev( c.low, u.low, v.low )
-        elif metric == 'max': return pcol_elev( c.hgh, u.hgh, v.hgh )
+        if metric=='mean': return pcol_elev( c.ave, u.ave, v.ave )
+        elif metric=='min': return pcol_elev( c.low, u.low, v.low )
+        elif metric=='max': return pcol_elev( c.hgh, u.hgh, v.hgh )
         else: raise Exception('Unknown "metric"')
     def plot_grid(self, axis, *args, **kwargs):
         """Plots ThinWalls mesh."""
