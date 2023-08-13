@@ -439,7 +439,6 @@ class ThinWalls(GMesh):
         d_se = numpy.minimum( U.low[::2,2::2], V.low[:-1:2,1::2] )
         d_nw = numpy.minimum( U.low[1::2,:-1:2], V.low[2::2,::2] )
         d_ne = numpy.minimum( U.low[1::2,2::2], V.low[2::2,1::2] )
-        oppo = numpy.minimum( d_ne, numpy.minimum( d_nw, d_se ) )
         # Interior sills
         s_sw = numpy.minimum( U.low[::2,1::2], V.low[1::2,::2] )
         s_se = numpy.minimum( U.low[::2,1::2], V.low[1::2,1::2] )
