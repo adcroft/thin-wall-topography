@@ -155,7 +155,6 @@ class ThinWalls(GMesh):
         assert datau.shape==self.shapeu, 'datau argument has wrong shape'
         assert datav.shape==self.shapev, 'datav argument has wrong shape'
         self.u_simple.set_equal(datau)
-        self.u_simple.set_equal(datau)
         self.v_simple.set_equal(datav)
     def init_effective_values(self):
         """Initialize effective values by setting equal to simple values."""
@@ -362,7 +361,6 @@ class ThinWalls(GMesh):
         d_se = numpy.maximum( U.low[::2,2::2], V.low[:-1:2,1::2] )
         d_nw = numpy.maximum( U.low[1::2,:-1:2], V.low[2::2,::2] )
         d_ne = numpy.maximum( U.low[1::2,2::2], V.low[2::2,1::2] )
-        oppo = numpy.minimum( d_ne, numpy.minimum( d_nw, d_se ) )
         # Interior sills
         s_sw = numpy.minimum( U.low[::2,1::2], V.low[1::2,::2] )
         s_se = numpy.minimum( U.low[::2,1::2], V.low[1::2,1::2] )
@@ -443,7 +441,7 @@ class ThinWalls(GMesh):
         C.low[J+1,I+1] = numpy.minimum( C.low[J+1,I+1], d_nw[j,i] )
         # Outer edges
         new_ridge = numpy.minimum( r_ne, r_sw )
-        V.low[J+2,I+1] = numpy.maximum( V.low[J+1,I+1], r_ne[j,i] )
+        V.low[J+2,I+1] = numpy.maximum( V.low[J+2,I+1], r_ne[j,i] )
         U.low[J+1,I+2] = numpy.maximum( U.low[J+1,I+2], r_ne[j,i] )
         U.low[J,I+2] = numpy.maximum( U.low[J,I+2], new_ridge[j,i] )
         V.low[J,I+1] = numpy.maximum( V.low[J,I+1], new_ridge[j,i] )
@@ -463,7 +461,7 @@ class ThinWalls(GMesh):
         C.low[J+1,I+1] = numpy.minimum( C.low[J+1,I+1], d_ne[j,i] )
         # Outer edges
         new_ridge = numpy.minimum( r_nw, r_se )
-        V.low[J+2,I] = numpy.maximum( V.low[J+1,I], r_nw[j,i] )
+        V.low[J+2,I] = numpy.maximum( V.low[J+2,I], r_nw[j,i] )
         U.low[J+1,I] = numpy.maximum( U.low[J+1,I], r_nw[j,i] )
         U.low[J,I] = numpy.maximum( U.low[J,I], new_ridge[j,i] )
         V.low[J,I] = numpy.maximum( V.low[J,I], new_ridge[j,i] )
