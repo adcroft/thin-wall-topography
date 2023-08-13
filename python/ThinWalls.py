@@ -258,6 +258,7 @@ class ThinWalls(GMesh):
         print(j.size, " pushed")
     def lower_tallest_buttress(self):
         """Lower tallest barrier to remove buttress"""
+        print("Begin lower_tallest_buttress")
         # Alias lowest
         C,U,V = self.c_effective.low,self.u_effective.low,self.v_effective.low
         print("Begin lower_tallest_buttress")
@@ -297,6 +298,7 @@ class ThinWalls(GMesh):
         oppo3 = numpy.maximum( V[1::2,1::2], numpy.maximum( U[::2,1::2], U[1::2,1::2] ) )
         j,i = numpy.nonzero( V[1::2,::2]>oppo3 )
         V[2*j+1,2*i] = oppo3[j,i]
+        print("  W ridge (ave): ", j.size, ' removed')
         print("  W ridge (ave): ", j.size, ' removed')
         # Find where the E ridge is higher than other 3
         oppo3 = numpy.maximum( V[1::2,::2], numpy.maximum( U[::2,1::2], U[1::2,1::2] ) )
@@ -427,6 +429,7 @@ class ThinWalls(GMesh):
         print(j.size, " folded")
     def invert_exterior_corners(self):
         """The deepest exterior corner is expanded to fill the coarse cell"""
+        print("Begin invert_exterior_corners")
         # Alias
         C,U,V = self.c_effective,self.u_effective,self.v_effective
         print("Begin invert_exterior_corners")
