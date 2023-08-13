@@ -20,9 +20,6 @@ class Stats:
             if mean is not None: self.set_equal(mean)
             if min is not None: self.set_equal(min)
             if max is not None: self.set_equal(max)
-        # if mean is not None: self.set_equal(mean)
-        # if min is not None: self.set_equal(min)
-        # if max is not None: self.set_equal(max)
     def __repr__(self):
         return '<Stats shape:(%i,%i)>'%(self.shape[0], self.shape[1])
     def __copy__(self):
