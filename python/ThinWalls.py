@@ -14,9 +14,15 @@ class Stats:
         self.low = numpy.zeros(shape)
         self.hgh = numpy.zeros(shape)
         self.ave = numpy.zeros(shape)
-        if mean is not None: self.set_equal(mean)
-        if min is not None: self.set_equal(min)
-        if max is not None: self.set_equal(max)
+        if (mean is not None) and (min is not None) and (max is not None):
+            self.set(min, max, mean)
+        else:
+            if mean is not None: self.set_equal(mean)
+            if min is not None: self.set_equal(min)
+            if max is not None: self.set_equal(max)
+        # if mean is not None: self.set_equal(mean)
+        # if min is not None: self.set_equal(min)
+        # if max is not None: self.set_equal(max)
     def __repr__(self):
         return '<Stats shape:(%i,%i)>'%(self.shape[0], self.shape[1])
     def __copy__(self):
@@ -155,7 +161,6 @@ class ThinWalls(GMesh):
         """Set elevation of cell edges u,v."""
         assert datau.shape==self.shapeu, 'datau argument has wrong shape'
         assert datav.shape==self.shapev, 'datav argument has wrong shape'
-        self.u_simple.set_equal(datau)
         self.u_simple.set_equal(datau)
         self.v_simple.set_equal(datav)
     def init_effective_values(self):
@@ -301,11 +306,14 @@ class ThinWalls(GMesh):
         j,i = numpy.nonzero( V[1::2,1::2]>oppo3 )
         V[2*j+1,2*i+1] = oppo3[j,i]
         print("  E ridge (ave): ", j.size, ' removed')
-    def fold_out_central_ridges(self):
+    def fold_out_central_ridges(self, er=False):
         """Folded out interior ridges to the sides of the coarse cell"""
         print("Begin fold_out_central_ridges")
         print("  S: ", end="")
         self.fold_out_central_ridge_s()
+        if er:
+            print("  S=N: ", end="")
+            self.fold_out_central_ridge_ns()
         # Alias
         C, U, V = self.c_effective, self.u_effective, self.v_effective
         # Flip in j direction so j=S, i=E
@@ -322,6 +330,9 @@ class ThinWalls(GMesh):
         C, U, V = self.c_effective, self.u_effective, self.v_effective
         print("  W: ", end="")
         self.fold_out_central_ridge_s()
+        if er:
+            print("  W=E: ", end="")
+            self.fold_out_central_ridge_ns()
         # Flip in j direction so j=W, i=S
         C.flip(axis=0)
         U.flip(axis=0)
@@ -374,6 +385,48 @@ class ThinWalls(GMesh):
         C.low[J,I] = ns_ridge_low_min[j,i]
         C.low[J,I+1] = ns_ridge_low_min[j,i]
         U.low[J,I+1] = ns_ridge_low_min[j,i]
+        print(j.size, " folded")
+    def fold_out_central_ridge_ns(self):
+        """An interior east-west ridge is folded out to the southern outer edges if it
+        is the tallest central ridge and the south is the taller half to expand to."""
+        # Alias
+        C,U,V = self.c_effective,self.u_effective,self.v_effective
+        ew_ridge_low = numpy.minimum( V.low[1::2,::2], V.low[1::2,1::2] )
+        #ew_ridge_hgh = numpy.maximum( V.hgh[1::2,::2], V.hgh[1::2,1::2] )
+        #ew_ridge_ave = 0.5*( V.low[1::2,::2] + V.low[1::2,1::2] )
+        ns_ridge_low_min = numpy.minimum( U.low[::2,1::2], U.low[1::2,1::2] )
+        ns_ridge_low_max = numpy.maximum( U.low[::2,1::2], U.low[1::2,1::2] )
+        # Coarse cell index j,i
+        j,i = numpy.nonzero(
+              (  ( ew_ridge_low>ns_ridge_low_min) & (ew_ridge_low>=ns_ridge_low_max ) ) # E-W ridge is the taller ridge
+            & (  ( U.low[::2,1::2] == U.low[1::2,1::2] ) # Southern buttress is equal to the north
+               & ( C.low[::2,::2]+C.low[::2,1::2] == C.low[1::2,::2]+C.low[1::2,1::2] )  # Southern cells are equal to north on average
+               & ( V.low[:-1:2,::2]+V.low[:-1:2,1::2] == V.low[2::2,::2]+V.low[2::2,1::2] ) # Southern edges are equal to north on average
+              ) )
+        J,I = 2*j,2*i
+        # Outer edges of southern half
+        U.low[J,I] = numpy.maximum( U.low[J,I], ew_ridge_low[j,i] )
+        V.low[J,I] = numpy.maximum( V.low[J,I], ew_ridge_low[j,i] )
+        V.low[J,I+1] = numpy.maximum( V.low[J,I+1], ew_ridge_low[j,i] )
+        U.low[J,I+2] = numpy.maximum( U.low[J,I+2], ew_ridge_low[j,i] )
+
+        # Outer edges of northern half
+        U.low[J+1,I] = numpy.maximum( U.low[J+1,I], ew_ridge_low[j,i] )
+        V.low[J+2,I] = numpy.maximum( V.low[J+2,I], ew_ridge_low[j,i] )
+        V.low[J+2,I+1] = numpy.maximum( V.low[J+2,I+1], ew_ridge_low[j,i] )
+        U.low[J+1,I+2] = numpy.maximum( U.low[J+1,I+2], ew_ridge_low[j,i] )
+
+        # Replace E-W ridge
+        V.low[J+1,I] = ns_ridge_low_min[j,i]
+        V.low[J+1,I+1] = ns_ridge_low_min[j,i]
+        # Southern cells
+        C.low[J,I] = ns_ridge_low_min[j,i]
+        C.low[J,I+1] = ns_ridge_low_min[j,i]
+        U.low[J,I+1] = ns_ridge_low_min[j,i]
+        # Northern cells
+        C.low[J+1,I] = ns_ridge_low_min[j,i]
+        C.low[J+1,I+1] = ns_ridge_low_min[j,i]
+        U.low[J+1,I+1] = ns_ridge_low_min[j,i]
         print(j.size, " folded")
     def invert_exterior_corners(self):
         """The deepest exterior corner is expanded to fill the coarse cell"""
