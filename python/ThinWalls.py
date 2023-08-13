@@ -703,14 +703,39 @@ class ThinWalls(GMesh):
             XY = numpy.zeros( (2*self.nj+2,2*self.ni+2) )
             dr = xy[1:,1:] - xy[:-1,:-1]
             dl = xy[:-1,1:] - xy[1:,:-1]
+
             XY[::2,::2] = xy
+            # Reference to the northeast corner of the cell located to the southwest
             XY[2::2,2::2] = XY[2::2,2::2] - dr*thickness/2
+            # Southmost row
+            XY[0,::2] = XY[0,::2] - numpy.r_[dr[0,:], dr[0,-1]]*thickness/2
+            # Westmost column (excluding the southwestmost point)
+            XY[2::2,0] = XY[2::2,0] - numpy.r_[dr[1:,0] ,dr[-1,0]]*thickness/2
+
             XY[1::2,::2] = xy
+            # Reference to the southeast corner of the cell located to the northwest
             XY[1:-1:2,2::2] = XY[1:-1:2,2::2] - dl*thickness/2
+            # Westmost column
+            XY[1::2,0] = XY[1::2,0] - numpy.r_[dl[0,0],  dl[:,0]]*thickness/2
+            # Northmost row (excluding the northwestmost point)
+            XY[-1,2::2] = XY[-1,2::2] - numpy.r_[dl[-1,1:], dl[-1,-1]]*thickness/2
+
             XY[::2,1::2] = xy
+            # Reference to the northwest corner of the cell located to the southeast
             XY[2::2,1:-1:2] = XY[2::2,1:-1:2] + dl*thickness/2
+            # Eastmost column
+            XY[::2,-1] = XY[::2,-1] + numpy.r_[dl[:,-1], dl[-1,-1]]*thickness/2
+            # Southmost row (excluding the southeastmost point)
+            XY[0,1:-1:2] = XY[0,1:-1:2] + numpy.r_[dl[0,0], dl[0,:-1]]*thickness/2
+
             XY[1::2,1::2] = xy
+            # Reference to the southwest corner of the cell located to the northeast
             XY[1:-1:2,1:-1:2] = XY[1:-1:2,1:-1:2] + dr*thickness/2
+            # Northmost row
+            XY[-1,1::2] = XY[-1,1::2] + numpy.r_[dr[-1,0], dr[-1,:]]*thickness/2
+            # Eastmost column (excluding the northeastmost point)
+            XY[1:-1:2,-1] = XY[1:-1:2,-1] + numpy.r_[dr[0,-1], dr[:-1,-1]]*thickness/2
+
             return XY
         lon = copy_coord(self.lon)
         lat = copy_coord(self.lat)
