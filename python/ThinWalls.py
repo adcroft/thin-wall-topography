@@ -14,9 +14,12 @@ class Stats:
         self.low = numpy.zeros(shape)
         self.hgh = numpy.zeros(shape)
         self.ave = numpy.zeros(shape)
-        if mean is not None: self.set_equal(mean)
-        if min is not None: self.set_equal(min)
-        if max is not None: self.set_equal(max)
+        if (mean is not None) and (min is not None) and (max is not None):
+            self.set(min, max, mean)
+        else:
+            if mean is not None: self.set_equal(mean)
+            if min is not None: self.set_equal(min)
+            if max is not None: self.set_equal(max)
     def __repr__(self):
         return '<Stats shape:(%i,%i)>'%(self.shape[0], self.shape[1])
     def __copy__(self):
@@ -116,6 +119,7 @@ class ThinWalls(GMesh):
         copy.c_effective = self.c_effective.copy()
         copy.u_effective = self.u_effective.copy()
         copy.v_effective = self.v_effective.copy()
+        return copy
     def copy(self):
         """Returns new instance with copied values"""
         return self.__copy__()
