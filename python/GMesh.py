@@ -103,6 +103,11 @@ class GMesh:
 
         self.rfl = rfl #refining level
 
+    def read_center_coords(self, lont, latt):
+        if lont.shape != (self.nj,self.ni): raise Exception('Cell center lon has the wrong size')
+        if latt.shape != (self.nj,self.ni): raise Exception('Cell center lat has the wrong size')
+        self.lont, self.latt = lont, latt
+
     def __copy__(self):
         return GMesh(shape = self.shape, lon=self.lon, lat=self.lat, area=self.area)
     def copy(self):
@@ -149,6 +154,34 @@ class GMesh:
         lon = np.arccos( R*X ) * rad2deg # 0 .. 180
         lon = np.where( Y>=0, lon, -lon ) # Handle -180 .. 0
         return lon,lat
+
+    def interp_center_coords(self, work_in_3d=True):
+        """Returns interpolated center coordinates from nodes"""
+
+        def mean4(A):
+            """Retruns a refined variable a with shape (2*nj+1,2*ni+1) by linearly interpolation A with shape (nj+1,ni+1)."""
+            return 0.25 * ( ( A[:-1,:-1] + A[1:,1:] ) + ( A[1:,:-1] + A[:-1,1:] ) ) # Mid-point of cell on original mesh
+        
+        if work_in_3d:
+            # Calculate 3d coordinates of nodes (X,Y,Z), Z points along pole, Y=0 at lon=0,180, X=0 at lon=+-90
+            X,Y,Z = GMesh.__lonlat_to_XYZ(self.lon, self.lat)
+
+            # Refine mesh in 3d and project onto sphere
+            X,Y,Z = mean4(X), mean4(Y), mean4(Z)
+            R = 1. / np.sqrt((X*X + Y*Y) + Z*Z)
+            X,Y,Z = R*X, R*Y, R*Z
+
+            # Normalize X,Y to unit circle
+            #sub_roundoff = 2./np.finfo(X[0,0]).max
+            #R = 1. / ( np.sqrt(X*X + Y*Y) + sub_roundoff )
+            #X = R * X
+            #Y = R * Y
+
+            # Convert from 3d to spherical coordinates
+            lon,lat = GMesh.__XYZ_to_lonlat(X, Y, Z)
+        else:
+            lon,lat = mean4(self.lon), mean4(self.lat)
+        return lon, lat
 
     def refineby2(self, work_in_3d=True):
         """Returns new Mesh instance with twice the resolution"""
@@ -213,7 +246,7 @@ class GMesh:
                                    + self.height[1:-1:2,0:-1:2]
                                    + self.height[0:-1:2,1:-1:2])
 
-    def find_nn_uniform_source(self, lon, lat):
+    def find_nn_uniform_source(self, lon, lat, use_center=False):
         """Returns the i,j arrays for the indexes of the nearest neighbor point to grid (lon,lat)"""
         assert is_mesh_uniform(lon,lat), 'Grid (lon,lat) is not uniform, this method will not work properly'
         if len(lon.shape)==2:
@@ -222,13 +255,17 @@ class GMesh:
         sni,snj =lon.shape[0],lat.shape[0] # Shape of source
         # Spacing on uniform mesh
         dellon, dellat = (lon[-1]-lon[0])/(sni-1), (lat[-1]-lat[0])/(snj-1)
-        assert self.lat.max()<=lat.max()+0.5*dellat, 'Mesh has latitudes above range of regular grid '+str(self.lat.max())+' '+str(lat.max()+0.5*dellat)
-        assert self.lat.min()>=lat.min()-0.5*dellat, 'Mesh has latitudes below range of regular grid '+str(self.lat.min())+' '+str(lat.min()-0.5*dellat)
+        # assert self.lat.max()<=lat.max()+0.5*dellat, 'Mesh has latitudes above range of regular grid '+str(self.lat.max())+' '+str(lat.max()+0.5*dellat)
+        # assert self.lat.min()>=lat.min()-0.5*dellat, 'Mesh has latitudes below range of regular grid '+str(self.lat.min())+' '+str(lat.min()-0.5*dellat)
         if abs( (lon[-1]-lon[0])-360 )<=360.*np.finfo( lon.dtype ).eps:
             sni-=1 # Account for repeated longitude
+        if use_center:
+            lon_tgt, lat_tgt = self.interp_center_coords(work_in_3d=True)
+        else:
+            lon_tgt, lat_tgt = self.lon, self.lat
         # Nearest integer (the upper one if equidistant)
-        nn_i = np.floor(np.mod(self.lon-lon[0]+0.5*dellon,360)/dellon)
-        nn_j = np.floor(0.5+(self.lat-lat[0])/dellat)
+        nn_i = np.floor(np.mod(lon_tgt-lon[0]+0.5*dellon,360)/dellon)
+        nn_j = np.floor(0.5+(lat_tgt-lat[0])/dellat)
         nn_j = np.minimum(nn_j, snj-1)
         assert nn_j.min()>=0, 'Negative j index calculated! j='+str(nn_j.min())
         assert nn_j.max()<snj, 'Out of bounds j index calculated! j='+str(nn_j.max())
@@ -236,22 +273,22 @@ class GMesh:
         assert nn_i.max()<sni, 'Out of bounds i index calculated! i='+str(nn_i.max())
         return nn_i.astype(int),nn_j.astype(int)
 
-    def source_hits(self, xs, ys, singularity_radius=0.25):
+    def source_hits(self, xs, ys, use_center=False, singularity_radius=0.25):
         """Returns an mask array of 1's if a cell with center (xs,ys) is intercepted by a node
            on the mesh, 0 if no node falls in a cell"""
         # Indexes of nearest xs,ys to each node on the mesh
-        i,j = self.find_nn_uniform_source(xs,ys)
+        i,j = self.find_nn_uniform_source(xs,ys,use_center=use_center)
         sni,snj =xs.shape[0],ys.shape[0] # Shape of source
         hits = np.zeros((snj,sni))
         if singularity_radius>0: hits[np.abs(ys)>90-singularity_radius] = 1
         hits[j,i] = 1
         return hits
 
-    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, verbose=True, singularity_radius=0.25):
+    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, verbose=True, use_center=False, singularity_radius=0.25):
         """Repeatedly refines the mesh until all cells in the source grid are intercepted by mesh nodes.
            Returns a list of the refined meshes starting with parent mesh."""
         GMesh_list, this = [self], self
-        hits = this.source_hits(src_lon, src_lat, singularity_radius=singularity_radius)
+        hits = this.source_hits(src_lon, src_lat, use_center=use_center, singularity_radius=singularity_radius)
         nhits, prev_hits, mb = hits.sum().astype(int), 0, 2*8*this.shape[0]*this.shape[1]/1024/1024
         if verbose: print(this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
         # Conditions to refine
@@ -260,7 +297,7 @@ class GMesh:
         converged = np.all(hits) or (nhits==prev_hits)
         while(not converged and len(GMesh_list)<max_stages and 4*mb<max_mb):
             this = this.refineby2()
-            hits = this.source_hits(src_lon, src_lat, singularity_radius=singularity_radius)
+            hits = this.source_hits(src_lon, src_lat, use_center=use_center, singularity_radius=singularity_radius)
             nhits, prev_hits, mb = hits.sum().astype(int), nhits, 2*8*this.shape[0]*this.shape[1]/1024/1024
             converged = np.all(hits) or (nhits==prev_hits)
             if nhits>prev_hits:
@@ -272,10 +309,13 @@ class GMesh:
 
         return GMesh_list
 
-    def project_source_data_onto_target_mesh(self,xs,ys,zs):
+    def project_source_data_onto_target_mesh(self,xs,ys,zs,use_center=False):
         """Returns the array on target mesh with values equal to the nearest-neighbor source point data"""
-        if xs.shape != ys.shape: raise Exception('xs and ys must be the same shape')
-        nns_i,nns_j = self.find_nn_uniform_source(xs,ys)
-        self.height = np.zeros(self.lon.shape)
+        # if xs.shape != ys.shape: raise Exception('xs and ys must be the same shape')
+        nns_i,nns_j = self.find_nn_uniform_source(xs,ys,use_center=use_center)
+        if use_center:
+            self.height = np.zeros((self.nj,self.ni))
+        else:
+            self.height = np.zeros((self.nj+1,self.ni+1))
         self.height[:,:] = zs[nns_j[:,:],nns_i[:,:]]
         return
