@@ -114,7 +114,7 @@ class GMesh:
         """Returns new instance with copied values"""
         return self.__copy__()
     def __repr__(self):
-        return '<GMesh nj:%i ni:%i shape:(%i,%i)>'%(self.nj,self.ni,self.shape[0],self.shape[1])
+        return '<%s nj:%i ni:%i shape:(%i,%i)>'%(self.__class__.__name__,self.nj,self.ni,self.shape[0],self.shape[1])
     def __getitem__(self, key):
         return getattr(self, key)
     def transpose(self):
@@ -217,7 +217,7 @@ class GMesh:
         else:
             lon,lat = local_refine(self.lon), local_refine(self.lat)
 
-        return GMesh(lon=lon, lat=lat, rfl=self.rfl+1)
+        return self.__class__(lon=lon, lat=lat, rfl=self.rfl+1)
 
     def rotate(self, y_rot=0, z_rot=0):
         """Sequentially apply a rotation about the Y-axis and then the Z-axis."""
@@ -290,7 +290,7 @@ class GMesh:
         GMesh_list, this = [self], self
         hits = this.source_hits(src_lon, src_lat, use_center=use_center, singularity_radius=singularity_radius)
         nhits, prev_hits, mb = hits.sum().astype(int), 0, 2*8*this.shape[0]*this.shape[1]/1024/1024
-        if verbose: print(this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
+        if verbose: print('Refine level', this.rfl, this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
         # Conditions to refine
         # 1) Not all cells are intercepted
         # 2) A refinement intercepted more cells
@@ -302,7 +302,7 @@ class GMesh:
             converged = np.all(hits) or (nhits==prev_hits)
             if nhits>prev_hits:
                 GMesh_list.append( this )
-                if verbose: print(this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
+                if verbose: print('Refine level', this.rfl, this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
 
         if not converged:
             print("Warning: Maximum number of allowed refinements reached without all source cells hit.")

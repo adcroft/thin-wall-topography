@@ -177,6 +177,22 @@ class ThinWalls(GMesh):
         tmp[0,:] = self.c_simple.ave[0,:]
         tmp[-1,:] = self.c_simple.ave[-1,:]
         self.v_simple.set_equal( tmp )
+    def set_center_from_corner(self):
+        """Set elevation of cell centers from corners."""
+        self.c_simple.ave = 0.25 * ( (self.height[:-1,:-1] + self.height[1:,1:])
+                                    +(self.height[1:,:-1] + self.height[:-1,1:]) )
+        self.c_simple.hgh = numpy.maximum( numpy.maximum( self.height[:-1,:-1], self.height[1:,1:]),
+                                           numpy.maximum( self.height[1:,:-1], self.height[:-1,1:]) )
+        self.c_simple.low = numpy.minimum( numpy.minimum( self.height[:-1,:-1], self.height[1:,1:]),
+                                           numpy.minimum( self.height[1:,:-1], self.height[:-1,1:]) )
+    def set_edge_from_corner(self):
+        """Set elevation of cell edges from corners."""
+        self.u_simple.ave = 0.5 * ( self.height[:-1,:] + self.height[1:,:] )
+        self.u_simple.hgh = numpy.maximum( self.height[:-1,:], self.height[1:,:] )
+        self.u_simple.low = numpy.minimum( self.height[:-1,:], self.height[1:,:] )
+        self.v_simple.ave = 0.5 * ( self.height[:,:-1] + self.height[:,1:] )
+        self.v_simple.hgh = numpy.maximum( self.height[:,:-1], self.height[:,1:] )
+        self.v_simple.low = numpy.minimum( self.height[:,:-1], self.height[:,1:] )
     def push_corners(self, update_interior_mean_max=True):
         """Folds out tallest corners. Acts only on "effective" values.
 
@@ -675,7 +691,7 @@ class ThinWalls(GMesh):
         U[J+1,I] = numpy.maximum( U[J+1,I], nw_deepest_connection[j,i] )
 
     def coarsen(self):
-        M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2])
+        M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2],rfl=self.rfl-1)
         M.c_simple.ave = self.c_simple.mean4()
         M.c_simple.low = self.c_simple.min4()
         M.c_simple.hgh = self.c_simple.max4()
