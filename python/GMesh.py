@@ -103,10 +103,10 @@ class GMesh:
 
         self.rfl = rfl #refining level
 
-    def read_center_coords(self, lont, latt):
-        if lont.shape != (self.nj,self.ni): raise Exception('Cell center lon has the wrong size')
-        if latt.shape != (self.nj,self.ni): raise Exception('Cell center lat has the wrong size')
-        self.lont, self.latt = lont, latt
+    # def read_center_coords(self, lont, latt):
+    #     if lont.shape != (self.nj,self.ni): raise Exception('Cell center lon has the wrong size')
+    #     if latt.shape != (self.nj,self.ni): raise Exception('Cell center lat has the wrong size')
+    #     self.lont, self.latt = lont, latt
 
     def __copy__(self):
         return GMesh(shape = self.shape, lon=self.lon, lat=self.lat, area=self.area)
@@ -182,6 +182,18 @@ class GMesh:
         else:
             lon,lat = mean4(self.lon), mean4(self.lat)
         return lon, lat
+
+    def coarsest_resolution(self):
+        """Returns the coarsest resolution"""
+        def mdist(x1, x2):
+            """Returns positive distance modulo 360."""
+            return np.minimum(np.mod(x1 - x2, 360.0), np.mod(x2 - x1, 360.0))
+        l, p = self.lon, self.lat
+        del_lam = max([mdist(l[:,:-1], l[:,1:]).max(), mdist(l[:-1,:], l[1:,:]).max(),
+                       mdist(l[:-1,:-1], l[1:,1:]).max(), mdist(l[1:,:-1], l[:-1,1:]).max(),])
+        del_phi = max([np.abs(np.diff(p, axis=0)).max(), np.abs(np.diff(p, axis=1)).max(),
+                       np.abs(p[:-1,:-1]-p[1:,1:]).max(), np.abs(p[1:,:-1]-p[:-1,1:]).max()])
+        return del_lam, del_phi
 
     def refineby2(self, work_in_3d=True):
         """Returns new Mesh instance with twice the resolution"""
@@ -284,7 +296,7 @@ class GMesh:
         hits[j,i] = 1
         return hits
 
-    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, verbose=True, use_center=False, singularity_radius=0.25):
+    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, verbose=True, use_center=False, resolution_limit=False, singularity_radius=0.25):
         """Repeatedly refines the mesh until all cells in the source grid are intercepted by mesh nodes.
            Returns a list of the refined meshes starting with parent mesh."""
         GMesh_list, this = [self], self
@@ -294,12 +306,23 @@ class GMesh:
         # Conditions to refine
         # 1) Not all cells are intercepted
         # 2) A refinement intercepted more cells
-        converged = np.all(hits) or (nhits==prev_hits)
+        # 3) [if resolution_limit] Coarsest resolution in each direction is finer than source.
+        #    This avoids the excessive refinement which is essentially extrapolation.
+        fine = False
+        if resolution_limit:
+            sni,snj =src_lon.shape[0],src_lat.shape[0]
+            dellon_s, dellat_s = (src_lon[-1]-src_lon[0])/(sni-1), (src_lat[-1]-src_lat[0])/(snj-1)
+            dellon_t, dellat_t = this.coarsest_resolution()
+            fine = (dellon_t<=dellon_s) and (dellat_t<=dellat_s)
+        converged = np.all(hits) or (nhits==prev_hits) or (resolution_limit and fine)
         while(not converged and len(GMesh_list)<max_stages and 4*mb<max_mb):
             this = this.refineby2()
             hits = this.source_hits(src_lon, src_lat, use_center=use_center, singularity_radius=singularity_radius)
             nhits, prev_hits, mb = hits.sum().astype(int), nhits, 2*8*this.shape[0]*this.shape[1]/1024/1024
-            converged = np.all(hits) or (nhits==prev_hits)
+            if resolution_limit:
+                dellon_t, dellat_t = this.coarsest_resolution()
+                fine = (dellon_t<=dellon_s) and (dellat_t<=dellat_s)
+            converged = np.all(hits) or (nhits==prev_hits) or (resolution_limit and fine)
             if nhits>prev_hits:
                 GMesh_list.append( this )
                 if verbose: print('Refine level', this.rfl, this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
