@@ -24,6 +24,38 @@ class Stats:
         return '<Stats shape:(%i,%i)>'%(self.shape[0], self.shape[1])
     def __copy__(self):
         return Stats(self.shape, mean=self.ave, min=self.low, max=self.hgh)
+    def __getitem__(self, key):
+        key = Stats._convert_key_to_slice(key)
+
+        low = self.low[key]
+        hgh = self.hgh[key]
+        ave = self.ave[key]
+        shape = ave.shape
+        return Stats(shape, mean=ave, min=low, max=hgh)
+    def __setitem__(self, key, value):
+        key = Stats._convert_key_to_slice(key)
+
+        self.low[key] = value.low[:]
+        self.hgh[key] = value.hgh[:]
+        self.ave[key] = value.ave[:]
+    @staticmethod
+    def _convert_key_to_slice(key):
+        """Convert a two-element array key to a tuple of two slices
+        This makes sure the sliced Stats is always 2D.
+        """
+        def single_key_to_slice(key):
+            if key==-1:
+                key_slice = slice(key,None)
+            else:
+                key_slice = slice(key,key+1)
+            return key_slice
+        if isinstance(key, tuple):
+            key = list(key)
+            if not isinstance(key[0],slice): key[0] = single_key_to_slice(key[0])
+            if not isinstance(key[1],slice): key[1] = single_key_to_slice(key[1])
+            return tuple(key)
+        else:
+            return single_key_to_slice(key)
     def copy(self):
         """Returns new instance with copied values"""
         return self.__copy__()
@@ -177,6 +209,22 @@ class ThinWalls(GMesh):
         tmp[0,:] = self.c_simple.ave[0,:]
         tmp[-1,:] = self.c_simple.ave[-1,:]
         self.v_simple.set_equal( tmp )
+    def set_center_from_corner(self):
+        """Set elevation of cell centers from corners."""
+        self.c_simple.ave = 0.25 * ( (self.height[:-1,:-1] + self.height[1:,1:])
+                                    +(self.height[1:,:-1] + self.height[:-1,1:]) )
+        self.c_simple.hgh = numpy.maximum( numpy.maximum( self.height[:-1,:-1], self.height[1:,1:]),
+                                           numpy.maximum( self.height[1:,:-1], self.height[:-1,1:]) )
+        self.c_simple.low = numpy.minimum( numpy.minimum( self.height[:-1,:-1], self.height[1:,1:]),
+                                           numpy.minimum( self.height[1:,:-1], self.height[:-1,1:]) )
+    def set_edge_from_corner(self):
+        """Set elevation of cell edges from corners."""
+        self.u_simple.ave = 0.5 * ( self.height[:-1,:] + self.height[1:,:] )
+        self.u_simple.hgh = numpy.maximum( self.height[:-1,:], self.height[1:,:] )
+        self.u_simple.low = numpy.minimum( self.height[:-1,:], self.height[1:,:] )
+        self.v_simple.ave = 0.5 * ( self.height[:,:-1] + self.height[:,1:] )
+        self.v_simple.hgh = numpy.maximum( self.height[:,:-1], self.height[:,1:] )
+        self.v_simple.low = numpy.minimum( self.height[:,:-1], self.height[:,1:] )
     def push_corners(self, update_interior_mean_max=True):
         """Folds out tallest corners. Acts only on "effective" values.
 
@@ -781,7 +829,7 @@ class ThinWalls(GMesh):
         U[J+1,I] = numpy.maximum( U[J+1,I], nw_deepest_connection[j,i] )
 
     def coarsen(self):
-        M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2])
+        M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2],rfl=self.rfl-1)
         M.c_simple.ave = self.c_simple.mean4()
         M.c_simple.low = self.c_simple.min4()
         M.c_simple.hgh = self.c_simple.max4()
