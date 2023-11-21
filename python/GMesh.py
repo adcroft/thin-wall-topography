@@ -161,7 +161,7 @@ class GMesh:
         def mean4(A):
             """Retruns a refined variable a with shape (2*nj+1,2*ni+1) by linearly interpolation A with shape (nj+1,ni+1)."""
             return 0.25 * ( ( A[:-1,:-1] + A[1:,1:] ) + ( A[1:,:-1] + A[:-1,1:] ) ) # Mid-point of cell on original mesh
-        
+
         if work_in_3d:
             # Calculate 3d coordinates of nodes (X,Y,Z), Z points along pole, Y=0 at lon=0,180, X=0 at lon=+-90
             X,Y,Z = GMesh.__lonlat_to_XYZ(self.lon, self.lat)
@@ -183,16 +183,22 @@ class GMesh:
             lon,lat = mean4(self.lon), mean4(self.lat)
         return lon, lat
 
-    def coarsest_resolution(self):
-        """Returns the coarsest resolution"""
+    def coarsest_resolution(self, mask_idx=[]):
+        """Returns the coarsest resolution at each grid"""
         def mdist(x1, x2):
             """Returns positive distance modulo 360."""
             return np.minimum(np.mod(x1 - x2, 360.0), np.mod(x2 - x1, 360.0))
         l, p = self.lon, self.lat
-        del_lam = max([mdist(l[:,:-1], l[:,1:]).max(), mdist(l[:-1,:], l[1:,:]).max(),
-                       mdist(l[:-1,:-1], l[1:,1:]).max(), mdist(l[1:,:-1], l[:-1,1:]).max(),])
-        del_phi = max([np.abs(np.diff(p, axis=0)).max(), np.abs(np.diff(p, axis=1)).max(),
-                       np.abs(p[:-1,:-1]-p[1:,1:]).max(), np.abs(p[1:,:-1]-p[:-1,1:]).max()])
+        del_lam = np.maximum(np.maximum(np.maximum(mdist(l[:-1,:-1], l[:-1,1:]), mdist(l[1:,:-1], l[1:,1:])),
+                                        np.maximum(mdist(l[:-1,:-1], l[1:,:-1]), mdist(l[1:,1:], l[:-1,1:]))),
+                             np.maximum(mdist(l[:-1,:-1], l[1:,1:]), mdist(l[1:,:-1], l[:-1,1:])))
+        del_phi = np.maximum(np.maximum(np.maximum(np.abs(np.diff(p, axis=0))[:,1:], np.abs((np.diff(p, axis=0))[:,:-1])),
+                                        np.maximum(np.abs(np.diff(p, axis=1))[1:,:], np.abs((np.diff(p, axis=1))[:-1,:]))),
+                             np.maximum(np.abs(p[:-1,:-1]-p[1:,1:]), np.abs(p[1:,:-1]-p[:-1,1:])))
+        if len(mask_idx)>0:
+            for Js, Je, Is, Ie in mask_idx:
+                jst, jed, ist, ied = Js*(2**self.rfl), Je*(2**self.rfl), Is*(2**self.rfl), Ie*(2**self.rfl)
+                del_lam[jst:jed, ist:ied], del_phi[jst:jed, ist:ied] = 0.0, 0.0
         return del_lam, del_phi
 
     def refineby2(self, work_in_3d=True):
@@ -290,13 +296,14 @@ class GMesh:
            on the mesh, 0 if no node falls in a cell"""
         # Indexes of nearest xs,ys to each node on the mesh
         i,j = self.find_nn_uniform_source(xs,ys,use_center=use_center)
-        sni,snj =xs.shape[0],ys.shape[0] # Shape of source
+        sni,snj = xs.shape[0],ys.shape[0] # Shape of source
         hits = np.zeros((snj,sni))
         if singularity_radius>0: hits[np.abs(ys)>90-singularity_radius] = 1
         hits[j,i] = 1
         return hits
 
-    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, verbose=True, use_center=False, resolution_limit=False, singularity_radius=0.25):
+    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, fixed_refine_level=-1, verbose=True,
+                    use_center=False, resolution_limit=False, mask_res=[], singularity_radius=0.25):
         """Repeatedly refines the mesh until all cells in the source grid are intercepted by mesh nodes.
            Returns a list of the refined meshes starting with parent mesh."""
         GMesh_list, this = [self], self
@@ -310,17 +317,20 @@ class GMesh:
         #    This avoids the excessive refinement which is essentially extrapolation.
         fine = False
         if resolution_limit:
-            sni,snj =src_lon.shape[0],src_lat.shape[0]
+            sni,snj = src_lon.shape[0],src_lat.shape[0]
             dellon_s, dellat_s = (src_lon[-1]-src_lon[0])/(sni-1), (src_lat[-1]-src_lat[0])/(snj-1)
-            dellon_t, dellat_t = this.coarsest_resolution()
+            del_lam, del_phi = this.coarsest_resolution(mask_idx=mask_res)
+            dellon_t, dellat_t = del_lam.max(), del_phi.max()
             fine = (dellon_t<=dellon_s) and (dellat_t<=dellat_s)
         converged = np.all(hits) or (nhits==prev_hits) or (resolution_limit and fine)
-        while(not converged and len(GMesh_list)<max_stages and 4*mb<max_mb):
+
+        while(((not converged) and (len(GMesh_list)<max_stages) and (4*mb<max_mb) and (fixed_refine_level==-1)) or (this.rfl<fixed_refine_level)):
             this = this.refineby2()
             hits = this.source_hits(src_lon, src_lat, use_center=use_center, singularity_radius=singularity_radius)
             nhits, prev_hits, mb = hits.sum().astype(int), nhits, 2*8*this.shape[0]*this.shape[1]/1024/1024
             if resolution_limit:
-                dellon_t, dellat_t = this.coarsest_resolution()
+                del_lam, del_phi = this.coarsest_resolution(mask_idx=mask_res)
+                dellon_t, dellat_t = del_lam.max(), del_phi.max()
                 fine = (dellon_t<=dellon_s) and (dellat_t<=dellat_s)
             converged = np.all(hits) or (nhits==prev_hits) or (resolution_limit and fine)
             if nhits>prev_hits:
