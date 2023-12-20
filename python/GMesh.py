@@ -235,7 +235,7 @@ class GMesh:
         else:
             lon,lat = local_refine(self.lon), local_refine(self.lat)
 
-        return self.__class__(lon=lon, lat=lat, rfl=self.rfl+1)
+        return GMesh(lon=lon, lat=lat, rfl=self.rfl+1)
 
     def rotate(self, y_rot=0, z_rot=0):
         """Sequentially apply a rotation about the Y-axis and then the Z-axis."""
@@ -302,7 +302,7 @@ class GMesh:
         hits[j,i] = 1
         return hits
 
-    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, fixed_refine_level=-1, verbose=True,
+    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, fixed_refine_level=-1, work_in_3d=True, verbose=True,
                     use_center=False, resolution_limit=False, mask_res=[], singularity_radius=0.25):
         """Repeatedly refines the mesh until all cells in the source grid are intercepted by mesh nodes.
            Returns a list of the refined meshes starting with parent mesh."""
@@ -325,7 +325,7 @@ class GMesh:
         converged = np.all(hits) or (nhits==prev_hits) or (resolution_limit and fine)
 
         while(((not converged) and (len(GMesh_list)<max_stages) and (4*mb<max_mb) and (fixed_refine_level==-1)) or (this.rfl<fixed_refine_level)):
-            this = this.refineby2()
+            this = this.refineby2(work_in_3d=work_in_3d)
             hits = this.source_hits(src_lon, src_lat, use_center=use_center, singularity_radius=singularity_radius)
             nhits, prev_hits, mb = hits.sum().astype(int), nhits, 2*8*this.shape[0]*this.shape[1]/1024/1024
             if resolution_limit:
@@ -333,7 +333,7 @@ class GMesh:
                 dellon_t, dellat_t = del_lam.max(), del_phi.max()
                 fine = (dellon_t<=dellon_s) and (dellat_t<=dellat_s)
             converged = np.all(hits) or (nhits==prev_hits) or (resolution_limit and fine)
-            if nhits>prev_hits:
+            if nhits>prev_hits or this.rfl<=fixed_refine_level:
                 GMesh_list.append( this )
                 if verbose: print('Refine level', this.rfl, this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
 
