@@ -309,7 +309,7 @@ class GMesh:
         GMesh_list, this = [self], self
         hits = this.source_hits(src_lon, src_lat, use_center=use_center, singularity_radius=singularity_radius)
         nhits, prev_hits, mb = hits.sum().astype(int), 0, 2*8*this.shape[0]*this.shape[1]/1024/1024
-        if verbose: print('Refine level', this.rfl, this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
+        if verbose: print('Refine level', this.rfl, repr(this), 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
         # Conditions to refine
         # 1) Not all cells are intercepted
         # 2) A refinement intercepted more cells
