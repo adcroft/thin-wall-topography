@@ -24,6 +24,38 @@ class Stats:
         return '<Stats shape:(%i,%i)>'%(self.shape[0], self.shape[1])
     def __copy__(self):
         return Stats(self.shape, mean=self.ave, min=self.low, max=self.hgh)
+    def __getitem__(self, key):
+        key = Stats._convert_key_to_slice(key)
+
+        low = self.low[key]
+        hgh = self.hgh[key]
+        ave = self.ave[key]
+        shape = ave.shape
+        return Stats(shape, mean=ave, min=low, max=hgh)
+    def __setitem__(self, key, value):
+        key = Stats._convert_key_to_slice(key)
+
+        self.low[key] = value.low[:]
+        self.hgh[key] = value.hgh[:]
+        self.ave[key] = value.ave[:]
+    @staticmethod
+    def _convert_key_to_slice(key):
+        """Convert a two-element array key to a tuple of two slices
+        This makes sure the sliced Stats is always 2D.
+        """
+        def single_key_to_slice(key):
+            if key==-1:
+                key_slice = slice(key,None)
+            else:
+                key_slice = slice(key,key+1)
+            return key_slice
+        if isinstance(key, tuple):
+            key = list(key)
+            if not isinstance(key[0],slice): key[0] = single_key_to_slice(key[0])
+            if not isinstance(key[1],slice): key[1] = single_key_to_slice(key[1])
+            return tuple(key)
+        else:
+            return single_key_to_slice(key)
     def copy(self):
         """Returns new instance with copied values"""
         return self.__copy__()
