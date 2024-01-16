@@ -109,7 +109,7 @@ class GMesh:
         """Returns new instance with copied values"""
         return self.__copy__()
     def __repr__(self):
-        return '<GMesh nj:%i ni:%i shape:(%i,%i)>'%(self.nj,self.ni,self.shape[0],self.shape[1])
+        return '<%s nj:%i ni:%i shape:(%i,%i)>'%(self.__class__.__name__,self.nj,self.ni,self.shape[0],self.shape[1])
     def __getitem__(self, key):
         return getattr(self, key)
     def transpose(self):
