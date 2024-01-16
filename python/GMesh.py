@@ -274,8 +274,8 @@ class GMesh:
 
     def project_source_data_onto_target_mesh(self,xs,ys,zs):
         """Returns the array on target mesh with values equal to the nearest-neighbor source point data"""
-        if xs.shape != ys.shape: raise Exception('xs and ys must be the same shape')
+        # if xs.shape != ys.shape: raise Exception('xs and ys must be the same shape')
         nns_i,nns_j = self.find_nn_uniform_source(xs,ys)
-        self.height = np.zeros(self.lon.shape)
+        self.height = np.zeros((self.nj+1,self.ni+1))
         self.height[:,:] = zs[nns_j[:,:],nns_i[:,:]]
         return
