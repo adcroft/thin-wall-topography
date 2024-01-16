@@ -150,6 +150,24 @@ class GMesh:
         lon = np.where( Y>=0, lon, -lon ) # Handle -180 .. 0
         return lon,lat
 
+    def coarsest_resolution(self, mask_idx=[]):
+        """Returns the coarsest resolution at each grid"""
+        def mdist(x1, x2):
+            """Returns positive distance modulo 360."""
+            return np.minimum(np.mod(x1 - x2, 360.0), np.mod(x2 - x1, 360.0))
+        l, p = self.lon, self.lat
+        del_lam = np.maximum(np.maximum(np.maximum(mdist(l[:-1,:-1], l[:-1,1:]), mdist(l[1:,:-1], l[1:,1:])),
+                                        np.maximum(mdist(l[:-1,:-1], l[1:,:-1]), mdist(l[1:,1:], l[:-1,1:]))),
+                             np.maximum(mdist(l[:-1,:-1], l[1:,1:]), mdist(l[1:,:-1], l[:-1,1:])))
+        del_phi = np.maximum(np.maximum(np.maximum(np.abs(np.diff(p, axis=0))[:,1:], np.abs((np.diff(p, axis=0))[:,:-1])),
+                                        np.maximum(np.abs(np.diff(p, axis=1))[1:,:], np.abs((np.diff(p, axis=1))[:-1,:]))),
+                             np.maximum(np.abs(p[:-1,:-1]-p[1:,1:]), np.abs(p[1:,:-1]-p[:-1,1:])))
+        if len(mask_idx)>0:
+            for Js, Je, Is, Ie in mask_idx:
+                jst, jed, ist, ied = Js*(2**self.rfl), Je*(2**self.rfl), Is*(2**self.rfl), Ie*(2**self.rfl)
+                del_lam[jst:jed, ist:ied], del_phi[jst:jed, ist:ied] = 0.0, 0.0
+        return del_lam, del_phi
+
     def refineby2(self, work_in_3d=True):
         """Returns new Mesh instance with twice the resolution"""
 
