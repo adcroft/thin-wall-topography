@@ -265,25 +265,40 @@ class GMesh:
         hits[j,i] = 1
         return hits
 
-    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, verbose=True, singularity_radius=0.25):
+    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, fixed_refine_level=-1, work_in_3d=True,
+                    resolution_limit=False, mask_res=[], singularity_radius=0.25, verbose=True):
         """Repeatedly refines the mesh until all cells in the source grid are intercepted by mesh nodes.
            Returns a list of the refined meshes starting with parent mesh."""
         GMesh_list, this = [self], self
         hits = this.source_hits(src_lon, src_lat, singularity_radius=singularity_radius)
         nhits, prev_hits, mb = hits.sum().astype(int), 0, 2*8*this.shape[0]*this.shape[1]/1024/1024
-        if verbose: print(this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
+        if verbose: print('Refine level', this.rfl, repr(this), 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
         # Conditions to refine
         # 1) Not all cells are intercepted
         # 2) A refinement intercepted more cells
-        converged = np.all(hits) or (nhits==prev_hits)
-        while(not converged and len(GMesh_list)<max_stages and 4*mb<max_mb):
-            this = this.refineby2()
+        # 3) [if resolution_limit] Coarsest resolution in each direction is finer than source.
+        #    This avoids the excessive refinement which is essentially extrapolation.
+        fine = False
+        if resolution_limit:
+            sni,snj = src_lon.shape[0],src_lat.shape[0]
+            dellon_s, dellat_s = (src_lon[-1]-src_lon[0])/(sni-1), (src_lat[-1]-src_lat[0])/(snj-1)
+            del_lam, del_phi = this.coarsest_resolution(mask_idx=mask_res)
+            dellon_t, dellat_t = del_lam.max(), del_phi.max()
+            fine = (dellon_t<=dellon_s) and (dellat_t<=dellat_s)
+        converged = np.all(hits) or (nhits==prev_hits) or (resolution_limit and fine)
+
+        while(((not converged) and (len(GMesh_list)<max_stages) and (4*mb<max_mb) and (fixed_refine_level==-1)) or (this.rfl<fixed_refine_level)):
+            this = this.refineby2(work_in_3d=work_in_3d)
             hits = this.source_hits(src_lon, src_lat, singularity_radius=singularity_radius)
             nhits, prev_hits, mb = hits.sum().astype(int), nhits, 2*8*this.shape[0]*this.shape[1]/1024/1024
-            converged = np.all(hits) or (nhits==prev_hits)
-            if nhits>prev_hits:
+            if resolution_limit:
+                del_lam, del_phi = this.coarsest_resolution(mask_idx=mask_res)
+                dellon_t, dellat_t = del_lam.max(), del_phi.max()
+                fine = (dellon_t<=dellon_s) and (dellat_t<=dellat_s)
+            converged = np.all(hits) or (nhits==prev_hits) or (resolution_limit and fine)
+            if nhits>prev_hits or this.rfl<=fixed_refine_level:
                 GMesh_list.append( this )
-                if verbose: print(this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
+                if verbose: print('Refine level', this.rfl, this, 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
 
         if not converged:
             print("Warning: Maximum number of allowed refinements reached without all source cells hit.")
