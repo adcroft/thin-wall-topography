@@ -273,11 +273,6 @@ class GMesh:
         hits = this.source_hits(src_lon, src_lat, singularity_radius=singularity_radius)
         nhits, prev_hits, mb = hits.sum().astype(int), 0, 2*8*this.shape[0]*this.shape[1]/1024/1024
         if verbose: print('Refine level', this.rfl, repr(this), 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
-        # Conditions to refine
-        # 1) Not all cells are intercepted
-        # 2) A refinement intercepted more cells
-        # 3) [if resolution_limit] Coarsest resolution in each direction is finer than source.
-        #    This avoids the excessive refinement which is essentially extrapolation.
         fine = False
         if resolution_limit:
             sni,snj = src_lon.shape[0],src_lat.shape[0]
@@ -286,7 +281,11 @@ class GMesh:
             dellon_t, dellat_t = del_lam.max(), del_phi.max()
             fine = (dellon_t<=dellon_s) and (dellat_t<=dellat_s)
         converged = np.all(hits) or (nhits==prev_hits) or (resolution_limit and fine)
-
+        # Conditions to refine
+        # 1) Not all cells are intercepted
+        # 2) A refinement intercepted more cells
+        # 3) [if resolution_limit] Coarsest resolution in each direction is coarser than source.
+        #    This avoids the excessive refinement which is essentially extrapolation.
         while(((not converged) and (len(GMesh_list)<max_stages) and (4*mb<max_mb) and (fixed_refine_level==-1)) or (this.rfl<fixed_refine_level)):
             this = this.refineby2(work_in_3d=work_in_3d)
             hits = this.source_hits(src_lon, src_lat, singularity_radius=singularity_radius)
