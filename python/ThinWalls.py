@@ -24,6 +24,12 @@ class Stats:
     def copy(self):
         """Returns new instance with copied values"""
         return self.__copy__()
+    def subtract(self, B):
+        A = Stats(self.shape)
+        A.low = self.low - B.low
+        A.ave = self.ave - B.ave
+        A.hgh = self.hgh - B.hgh
+        return A
     def dump(self):
         print('min:')
         print(self.low)
@@ -146,6 +152,9 @@ class ThinWalls(GMesh):
         self.c_effective.dump()
         self.u_effective.dump()
         self.v_effective.dump()
+    def info(self):
+        """Return info"""
+        print('ThinWalls(%ix%i)'%(self.shape[0],self.shape[1]))
     def set_cell_mean(self, data):
         """Set elevation of cell center."""
         assert data.shape==self.shape, 'data argument has wrong shape'
@@ -673,6 +682,22 @@ class ThinWalls(GMesh):
         U[J+1,I] = numpy.maximum( U[J+1,I], nw_deepest_connection[j,i] )
 
     def coarsen(self):
+        # Diagnose original deepest connections
+        sw, se, ne, nw = self.diagnose_corner_pathways()
+        ns = self.diagnose_NS_pathway()
+        ew = self.diagnose_EW_pathway()
+        # Push out corners
+        self.push_corners()
+        # Lower tallest buttress
+        self.lower_tallest_buttress()
+        # Remove central ridges
+        self.fold_out_central_ridges()
+        # Expand deepest corner
+        self.invert_exterior_corners()
+        # Apply connection limits
+        self.limit_NS_EW_connections(ns, ew)
+        self.limit_corner_connections(sw, se, ne, nw)
+
         M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2])
         M.c_simple.ave = self.c_simple.mean4()
         M.c_simple.low = self.c_simple.min4()
@@ -692,6 +717,52 @@ class ThinWalls(GMesh):
         M.v_effective.ave = self.v_effective.mean2v()
         M.v_effective.low = self.v_effective.min2v()
         M.v_effective.hgh = self.v_effective.max2v()
+        return M
+    def remove_walls(self):
+        M = ThinWalls(lon=self.lon[:,:],lat=self.lat[:,:])
+        M.c_simple.ave = self.c_simple.ave.copy()
+        M.c_simple.low = self.c_simple.low
+        M.c_simple.hgh = self.c_simple.hgh
+        M.u_effective.ave = self.u_effective.low
+        M.v_effective.ave = self.v_effective.low
+        M.c_effective.ave = 1*self.c_simple.low
+        c,u,v = M.c_effective.ave, self.u_effective.low, self.v_effective.low
+        # Simple fill raising taller cell
+       #for j in range(M.shape[0]):
+       #    for i in range(1,M.shape[1]):
+       #        if u[j,i]>max( c[j,i], c[j,i-1] ):
+       #            if c[j,i]>=c[j,i-1]: c[j,i] = max(c[j,i], u[j,i])
+       #            if c[j,i-1]>=c[j,i]: c[j,i-1] = max(c[j,i-1], u[j,i])
+       #for j in range(1,M.shape[0]):
+       #    for i in range(M.shape[1]):
+       #        if v[j,i]>max( c[j,i], c[j-1,i] ):
+       #            if c[j,i]>=c[j-1,i]: c[j,i] = max(c[j,i], v[j,i])
+       #            if c[j-1,i]>=c[j,i]: c[j-1,i] = max(c[j-1,i], v[j,i])
+       #for j in range(M.shape[0]):
+       #    for i in range(1,M.shape[1]):
+       #        if u[j,i]<max( c[j,i], c[j,i-1] ):
+       #            if c[j,i]>=c[j,i-1]: c[j,i] = min(c[j,i], u[j,i])
+       #            if c[j,i-1]>=c[j,i]: c[j,i-1] = min(c[j,i-1], u[j,i])
+       #for j in range(1,M.shape[0]):
+       #    for i in range(M.shape[1]):
+       #        if v[j,i]<max( c[j,i], c[j-1,i] ):
+       #            if c[j,i]>=c[j-1,i]: c[j,i] = min(c[j,i], v[j,i])
+       #            if c[j-1,i]>=c[j,i]: c[j-1,i] = min(c[j-1,i], v[j,i])
+        # Fill based on 3 edges of cells
+        for j in range(M.shape[0]):
+            for i in range(1,M.shape[1]):
+                if u[j,i]>max( c[j,i], c[j,i-1] ):
+                    a = max( [v[j,i], v[j+1,i], u[j,i+1]] )
+                    b = max( [v[j,i-1], v[j+1,i-1], u[j,i-1]] )
+                    if b>=a: c[j,i] = max(c[j,i], u[j,i])
+                    if a>=b: c[j,i-1] = max(c[j,i-1], u[j,i])
+        for j in range(1,M.shape[0]):
+            for i in range(M.shape[1]):
+                if v[j,i]>max( c[j,i], c[j-1,i] ):
+                    a = max( [u[j,i], u[j,i+1], v[j+1,i]] )
+                    b = max( [u[j-1,i], u[j-1,i+1], v[j-1,i]] )
+                    if b>=a: c[j,i] = max(c[j,i], v[j,i])
+                    if a>=b: c[j-1,i] = max(c[j-1,i], v[j,i])
         return M
     def plot(self, axis, thickness=0.2, metric='mean', measure='simple', *args, **kwargs):
         """Plots ThinWalls data."""
@@ -721,6 +792,8 @@ class ThinWalls(GMesh):
             c,u,v = self.c_simple, self.u_simple, self.v_simple
         elif measure is 'effective':
             c,u,v = self.c_effective, self.u_effective, self.v_effective
+        elif measure is 'diff':
+            c,u,v = self.c_effective.subtract(self.c_simple), self.u_effective.subtract(self.u_simple), self.v_effective.subtract(self.v_simple)
         else: raise Exception('Unknown "measure"')
         if metric is 'mean': return pcol_elev( c.ave, u.ave, v.ave )
         elif metric is 'min': return pcol_elev( c.low, u.low, v.low )

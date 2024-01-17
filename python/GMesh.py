@@ -213,7 +213,7 @@ class GMesh:
                                    + self.height[1::2,:-1:2]
                                    + self.height[:-1:2,1::2])
 
-    def find_nn_uniform_source(self, lon, lat):
+    def find_nn_uniform_source(self, lon, lat, nodes=True):
         """Returns the i,j arrays for the indexes of the nearest neighbor point to grid (lon,lat)"""
         assert is_mesh_uniform(lon,lat), 'Grid (lon,lat) is not uniform, this method will not work properly'
         if len(lon.shape)==2:
@@ -222,13 +222,19 @@ class GMesh:
         sni,snj =lon.shape[0],lat.shape[0] # Shape of source
         # Spacing on uniform mesh
         dellon, dellat = (lon[-1]-lon[0])/(sni-1), (lat[-1]-lat[0])/(snj-1)
-        assert self.lat.max()<=lat.max()+0.5*dellat, 'Mesh has latitudes above range of regular grid '+str(self.lat.max())+' '+str(lat.max()+0.5*dellat)
-        assert self.lat.min()>=lat.min()-0.5*dellat, 'Mesh has latitudes below range of regular grid '+str(self.lat.min())+' '+str(lat.min()-0.5*dellat)
+        def barij(a):
+            return 0.25*( ( a[:-1,:-1] + a[1:,1:] ) + ( a[:-1,1:] + a[1:,:-1] ) )
+        if nodes:
+            this_lon,this_lat = self.lon,self.lat
+        else:
+            this_lon,this_lat = barij(self.lon),barij(self.lat)
+        assert this_lat.max()<=lat.max()+0.5*dellat, 'Mesh has latitudes above range of regular grid '+str(this_lat.max())+' '+str(lat.max()+0.5*dellat)
+        assert this_lat.min()>=lat.min()-0.5*dellat, 'Mesh has latitudes below range of regular grid '+str(this_lat.min())+' '+str(lat.min()-0.5*dellat)
         if abs( (lon[-1]-lon[0])-360 )<=360.*np.finfo( lon.dtype ).eps:
             sni-=1 # Account for repeated longitude
         # Nearest integer (the upper one if equidistant)
-        nn_i = np.floor(np.mod(self.lon-lon[0]+0.5*dellon,360)/dellon)
-        nn_j = np.floor(0.5+(self.lat-lat[0])/dellat)
+        nn_i = np.floor(np.mod(this_lon-lon[0]+0.5*dellon,360)/dellon)
+        nn_j = np.floor(0.5+(this_lat-lat[0])/dellat)
         nn_j = np.minimum(nn_j, snj-1)
         assert nn_j.min()>=0, 'Negative j index calculated! j='+str(nn_j.min())
         assert nn_j.max()<snj, 'Out of bounds j index calculated! j='+str(nn_j.max())
