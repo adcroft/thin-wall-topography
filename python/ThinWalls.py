@@ -14,13 +14,48 @@ class Stats:
         self.low = numpy.zeros(shape)
         self.hgh = numpy.zeros(shape)
         self.ave = numpy.zeros(shape)
-        if mean is not None: self.set_equal(mean)
-        if min is not None: self.set_equal(min)
-        if max is not None: self.set_equal(max)
+        if (mean is not None) and (min is not None) and (max is not None):
+            self.set(min, max, mean)
+        else:
+            if mean is not None: self.set_equal(mean)
+            if min is not None: self.set_equal(min)
+            if max is not None: self.set_equal(max)
     def __repr__(self):
         return '<Stats shape:(%i,%i)>'%(self.shape[0], self.shape[1])
     def __copy__(self):
         return Stats(self.shape, mean=self.ave, min=self.low, max=self.hgh)
+    def __getitem__(self, key):
+        key = Stats._convert_key_to_slice(key)
+
+        low = self.low[key]
+        hgh = self.hgh[key]
+        ave = self.ave[key]
+        shape = ave.shape
+        return Stats(shape, mean=ave, min=low, max=hgh)
+    def __setitem__(self, key, value):
+        key = Stats._convert_key_to_slice(key)
+
+        self.low[key] = value.low[:]
+        self.hgh[key] = value.hgh[:]
+        self.ave[key] = value.ave[:]
+    @staticmethod
+    def _convert_key_to_slice(key):
+        """Convert a two-element array key to a tuple of two slices
+        This makes sure the sliced Stats is always 2D.
+        """
+        def single_key_to_slice(key):
+            if key==-1:
+                key_slice = slice(key,None)
+            else:
+                key_slice = slice(key,key+1)
+            return key_slice
+        if isinstance(key, tuple):
+            key = list(key)
+            if not isinstance(key[0],slice): key[0] = single_key_to_slice(key[0])
+            if not isinstance(key[1],slice): key[1] = single_key_to_slice(key[1])
+            return tuple(key)
+        else:
+            return single_key_to_slice(key)
     def copy(self):
         """Returns new instance with copied values"""
         return self.__copy__()
@@ -116,6 +151,7 @@ class ThinWalls(GMesh):
         copy.c_effective = self.c_effective.copy()
         copy.u_effective = self.u_effective.copy()
         copy.v_effective = self.v_effective.copy()
+        return copy
     def copy(self):
         """Returns new instance with copied values"""
         return self.__copy__()
@@ -155,7 +191,6 @@ class ThinWalls(GMesh):
         assert datau.shape==self.shapeu, 'datau argument has wrong shape'
         assert datav.shape==self.shapev, 'datav argument has wrong shape'
         self.u_simple.set_equal(datau)
-        self.u_simple.set_equal(datau)
         self.v_simple.set_equal(datav)
     def init_effective_values(self):
         """Initialize effective values by setting equal to simple values."""
@@ -174,7 +209,23 @@ class ThinWalls(GMesh):
         tmp[0,:] = self.c_simple.ave[0,:]
         tmp[-1,:] = self.c_simple.ave[-1,:]
         self.v_simple.set_equal( tmp )
-    def push_corners(self, update_interior_mean_max=True):
+    def set_center_from_corner(self):
+        """Set elevation of cell centers from corners."""
+        self.c_simple.ave = 0.25 * ( (self.height[:-1,:-1] + self.height[1:,1:])
+                                    +(self.height[1:,:-1] + self.height[:-1,1:]) )
+        self.c_simple.hgh = numpy.maximum( numpy.maximum( self.height[:-1,:-1], self.height[1:,1:]),
+                                           numpy.maximum( self.height[1:,:-1], self.height[:-1,1:]) )
+        self.c_simple.low = numpy.minimum( numpy.minimum( self.height[:-1,:-1], self.height[1:,1:]),
+                                           numpy.minimum( self.height[1:,:-1], self.height[:-1,1:]) )
+    def set_edge_from_corner(self):
+        """Set elevation of cell edges from corners."""
+        self.u_simple.ave = 0.5 * ( self.height[:-1,:] + self.height[1:,:] )
+        self.u_simple.hgh = numpy.maximum( self.height[:-1,:], self.height[1:,:] )
+        self.u_simple.low = numpy.minimum( self.height[:-1,:], self.height[1:,:] )
+        self.v_simple.ave = 0.5 * ( self.height[:,:-1] + self.height[:,1:] )
+        self.v_simple.hgh = numpy.maximum( self.height[:,:-1], self.height[:,1:] )
+        self.v_simple.low = numpy.minimum( self.height[:,:-1], self.height[:,1:] )
+    def push_corners(self, update_interior_mean_max=True, verbose=False):
         """Folds out tallest corners. Acts only on "effective" values.
 
         A convex corner within a coarse grid cell can be made into a
@@ -182,29 +233,34 @@ class ThinWalls(GMesh):
         parts of the cell. The cross-corner connection for the minor
         part of the cell is eliminated."""
 
-        self.push_corners_sw(update_interior_mean_max=update_interior_mean_max)
+        if verbose: print("Begin push_corners")
+        if verbose: print("  SW: ", end="")
+        self.push_corners_sw(update_interior_mean_max=update_interior_mean_max, verbose=verbose) # Push SW
         # Alias
         C, U, V = self.c_effective, self.u_effective, self.v_effective
         # Flip in j direction
         C.flip(axis=0)
         U.flip(axis=0)
         V.flip(axis=0)
-        self.push_corners_sw(update_interior_mean_max=update_interior_mean_max) # Push NW
+        if verbose: print("  NW: ", end="")
+        self.push_corners_sw(update_interior_mean_max=update_interior_mean_max, verbose=verbose) # Push NW
         # Flip in i direction
         C.flip(axis=1)
         U.flip(axis=1)
         V.flip(axis=1)
-        self.push_corners_sw(update_interior_mean_max=update_interior_mean_max) # Push NE
+        if verbose: print("  NE: ", end="")
+        self.push_corners_sw(update_interior_mean_max=update_interior_mean_max, verbose=verbose) # Push NE
         # Flip in j direction
         C.flip(axis=0)
         U.flip(axis=0)
         V.flip(axis=0)
-        self.push_corners_sw(update_interior_mean_max=update_interior_mean_max) # Push SE
+        if verbose: print("  SE: ", end="")
+        self.push_corners_sw(update_interior_mean_max=update_interior_mean_max, verbose=verbose) # Push SE
         # Flip in i direction
         C.flip(axis=1)
         U.flip(axis=1)
         V.flip(axis=1)
-    def push_corners_sw(self, update_interior_mean_max=True):
+    def push_corners_sw(self, update_interior_mean_max=True, verbose=False):
         """Folds out SW corner is it is the highest ridge. Acts only on "effective" values.
 
         A convex corner within a coarse grid cell can be made into a
@@ -247,66 +303,81 @@ class ThinWalls(GMesh):
                 #opp_ridge = numpy.maximum( U.hgh[1::2,1::2], V.hgh[1::2,1::2] ) # Ridge for NE corner
                 U.hgh[J,I+1] = opp_ridge[j,i]
                 V.hgh[J+1,I] = opp_ridge[j,i]
-    def lower_tallest_buttress(self):
+        if verbose: print(j.size, " pushed")
+    def lower_tallest_buttress(self, verbose=False):
         """Lower tallest barrier to remove buttress"""
+        if verbose: print("Begin lower_tallest_buttress")
         # Alias lowest
         C,U,V = self.c_effective.low,self.u_effective.low,self.v_effective.low
         # Find where the S ridge is higher than other 3
         oppo3 = numpy.maximum( U[1::2,1::2], numpy.maximum( V[1::2,::2], V[1::2,1::2] ) )
         j,i = numpy.nonzero( U[::2,1::2]>oppo3 )
         U[2*j,2*i+1] = oppo3[j,i]
+        if verbose: print("  S ridge (low): ", j.size, ' removed')
         # Find where the N ridge is higher than other 3
         oppo3 = numpy.maximum( U[::2,1::2], numpy.maximum( V[1::2,::2], V[1::2,1::2] ) )
         j,i = numpy.nonzero( U[1::2,1::2]>oppo3 )
         U[2*j+1,2*i+1] = oppo3[j,i]
+        if verbose: print("  N ridge (low): ", j.size, ' removed')
         # Find where the W ridge is higher than other 3
         oppo3 = numpy.maximum( V[1::2,1::2], numpy.maximum( U[::2,1::2], U[1::2,1::2] ) )
         j,i = numpy.nonzero( V[1::2,::2]>oppo3 )
         V[2*j+1,2*i] = oppo3[j,i]
+        if verbose: print("  W ridge (low): ", j.size, ' removed')
         # Find where the E ridge is higher than other 3
         oppo3 = numpy.maximum( V[1::2,::2], numpy.maximum( U[::2,1::2], U[1::2,1::2] ) )
         j,i = numpy.nonzero( V[1::2,1::2]>oppo3 )
         V[2*j+1,2*i+1] = oppo3[j,i]
+        if verbose: print("  E ridge (low): ", j.size, ' removed')
         # Alias for averages
         C,U,V = self.c_effective.ave,self.u_effective.ave,self.v_effective.ave
         # Find where the S ridge is higher than other 3
         oppo3 = numpy.maximum( U[1::2,1::2], numpy.maximum( V[1::2,::2], V[1::2,1::2] ) )
         j,i = numpy.nonzero( U[::2,1::2]>oppo3 )
         U[2*j,2*i+1] = oppo3[j,i]
+        if verbose: print("  S ridge (ave): ", j.size, ' removed')
         # Find where the N ridge is higher than other 3
         oppo3 = numpy.maximum( U[::2,1::2], numpy.maximum( V[1::2,::2], V[1::2,1::2] ) )
         j,i = numpy.nonzero( U[1::2,1::2]>oppo3 )
         U[2*j+1,2*i+1] = oppo3[j,i]
+        if verbose: print("  N ridge (ave): ", j.size, ' removed')
         # Find where the W ridge is higher than other 3
         oppo3 = numpy.maximum( V[1::2,1::2], numpy.maximum( U[::2,1::2], U[1::2,1::2] ) )
         j,i = numpy.nonzero( V[1::2,::2]>oppo3 )
         V[2*j+1,2*i] = oppo3[j,i]
+        if verbose: print("  W ridge (ave): ", j.size, ' removed')
         # Find where the E ridge is higher than other 3
         oppo3 = numpy.maximum( V[1::2,::2], numpy.maximum( U[::2,1::2], U[1::2,1::2] ) )
         j,i = numpy.nonzero( V[1::2,1::2]>oppo3 )
         V[2*j+1,2*i+1] = oppo3[j,i]
-    def fold_out_central_ridges(self):
+        if verbose: print("  E ridge (ave): ", j.size, ' removed')
+    def fold_out_central_ridges(self, verbose=False):
         """Folded out interior ridges to the sides of the coarse cell"""
-        self.fold_out_central_ridge_s()
+        if verbose: print("Begin fold_out_central_ridges")
+        if verbose: print("  S: ", end="")
+        self.fold_out_central_ridge_s(verbose=verbose)
         # Alias
         C, U, V = self.c_effective, self.u_effective, self.v_effective
         # Flip in j direction so j=S, i=E
         C.flip(axis=0)
         U.flip(axis=0)
         V.flip(axis=0)
-        self.fold_out_central_ridge_s()
+        if verbose: print("  N: ", end="")
+        self.fold_out_central_ridge_s(verbose=verbose)
         # Transpose so j=E, i=S
         C.transpose()
         U.transpose()
         V.transpose()
         self.u_effective,self.v_effective = self.v_effective,self.u_effective
         C, U, V = self.c_effective, self.u_effective, self.v_effective
-        self.fold_out_central_ridge_s()
+        if verbose: print("  W: ", end="")
+        self.fold_out_central_ridge_s(verbose=verbose)
         # Flip in j direction so j=W, i=S
         C.flip(axis=0)
         U.flip(axis=0)
         V.flip(axis=0)
-        self.fold_out_central_ridge_s()
+        if verbose: print("  E: ", end="")
+        self.fold_out_central_ridge_s(verbose=verbose)
         # Undo transformations
         C.transpose()
         U.transpose()
@@ -319,7 +390,7 @@ class ThinWalls(GMesh):
         C.flip(axis=1)
         U.flip(axis=1)
         V.flip(axis=1)
-    def fold_out_central_ridge_s(self):
+    def fold_out_central_ridge_s(self, verbose=False):
         """An interior east-west ridge is folded out to the southern outer edges if it
         is the tallest central ridge and the south is the taller half to expand to."""
         # Alias
@@ -353,8 +424,10 @@ class ThinWalls(GMesh):
         C.low[J,I] = ns_ridge_low_min[j,i]
         C.low[J,I+1] = ns_ridge_low_min[j,i]
         U.low[J,I+1] = ns_ridge_low_min[j,i]
-    def invert_exterior_corners(self):
+        if verbose: print(j.size, " folded")
+    def invert_exterior_corners(self, verbose=False):
         """The deepest exterior corner is expanded to fill the coarse cell"""
+        if verbose: print("Begin invert_exterior_corners")
         # Alias
         C,U,V = self.c_effective,self.u_effective,self.v_effective
         # Exterior deep corners
@@ -362,7 +435,6 @@ class ThinWalls(GMesh):
         d_se = numpy.maximum( U.low[::2,2::2], V.low[:-1:2,1::2] )
         d_nw = numpy.maximum( U.low[1::2,:-1:2], V.low[2::2,::2] )
         d_ne = numpy.maximum( U.low[1::2,2::2], V.low[2::2,1::2] )
-        oppo = numpy.minimum( d_ne, numpy.minimum( d_nw, d_se ) )
         # Interior sills
         s_sw = numpy.minimum( U.low[::2,1::2], V.low[1::2,::2] )
         s_se = numpy.minimum( U.low[::2,1::2], V.low[1::2,1::2] )
@@ -409,6 +481,7 @@ class ThinWalls(GMesh):
         V.low[J+2,I+1] = numpy.maximum( V.low[J+2,I+1], new_ridge[j,i] )
         V.low[J+2,I] = numpy.maximum( V.low[J+2,I], r_nw[j,i] )
         U.low[J+1,I] = numpy.maximum( U.low[J+1,I], r_nw[j,i] )
+        if verbose: print("  SW: ", swj.size, " inverted")
 
         # Apply SE
         j,i,J,I=sej,sei,2*sej,2*sei
@@ -429,6 +502,7 @@ class ThinWalls(GMesh):
         V.low[J+2,I] = numpy.maximum( V.low[J+2,I], new_ridge[j,i] )
         V.low[J+2,I+1] = numpy.maximum( V.low[J+2,I+1], r_ne[j,i] )
         U.low[J+1,I+2] = numpy.maximum( U.low[J+1,I+2], r_ne[j,i] )
+        if verbose: print("  SE: ", sej.size, " inverted")
 
         # Apply NW
         j,i,J,I=nwj,nwi,2*nwj,2*nwi
@@ -443,12 +517,13 @@ class ThinWalls(GMesh):
         C.low[J+1,I+1] = numpy.minimum( C.low[J+1,I+1], d_nw[j,i] )
         # Outer edges
         new_ridge = numpy.minimum( r_ne, r_sw )
-        V.low[J+2,I+1] = numpy.maximum( V.low[J+1,I+1], r_ne[j,i] )
+        V.low[J+2,I+1] = numpy.maximum( V.low[J+2,I+1], r_ne[j,i] )
         U.low[J+1,I+2] = numpy.maximum( U.low[J+1,I+2], r_ne[j,i] )
         U.low[J,I+2] = numpy.maximum( U.low[J,I+2], new_ridge[j,i] )
         V.low[J,I+1] = numpy.maximum( V.low[J,I+1], new_ridge[j,i] )
         V.low[J,I] = numpy.maximum( V.low[J,I], r_sw[j,i] )
         U.low[J,I] = numpy.maximum( U.low[J,I], r_sw[j,i] )
+        if verbose: print("  NW: ", nwj.size, " inverted")
 
         # Apply NE
         j,i,J,I=nej,nei,2*nej,2*nei
@@ -463,38 +538,55 @@ class ThinWalls(GMesh):
         C.low[J+1,I+1] = numpy.minimum( C.low[J+1,I+1], d_ne[j,i] )
         # Outer edges
         new_ridge = numpy.minimum( r_nw, r_se )
-        V.low[J+2,I] = numpy.maximum( V.low[J+1,I], r_nw[j,i] )
+        V.low[J+2,I] = numpy.maximum( V.low[J+2,I], r_nw[j,i] )
         U.low[J+1,I] = numpy.maximum( U.low[J+1,I], r_nw[j,i] )
         U.low[J,I] = numpy.maximum( U.low[J,I], new_ridge[j,i] )
         V.low[J,I] = numpy.maximum( V.low[J,I], new_ridge[j,i] )
         V.low[J,I+1] = numpy.maximum( V.low[J,I+1], r_se[j,i] )
         U.low[J,I+2] = numpy.maximum( U.low[J,I+2], r_se[j,i] )
-    def diagnose_EW_pathway(self):
+        if verbose: print("  NE: ", nej.size, " inverted")
+    def diagnose_EW_pathway(self, measure='effective'):
         """Returns deepest EW pathway"""
-        wn_to_en, wn_to_es, ws_to_en, ws_to_es = self.diagnose_EW_pathways()
+        wn_to_en, wn_to_es, ws_to_en, ws_to_es = self.diagnose_EW_pathways(measure=measure)
         wn = numpy.minimum( wn_to_en, wn_to_es)
         ws = numpy.minimum( ws_to_en, ws_to_es)
         return numpy.minimum( wn, ws)
-    def diagnose_EW_pathways(self):
+    def diagnose_EW_pathways(self, measure='effective'):
         """Returns deepest EW pathway"""
-        self.u_effective.transpose()
-        self.v_effective.transpose()
-        self.u_effective,self.v_effective = self.v_effective,self.u_effective
-        wn_to_en, wn_to_es, ws_to_en, ws_to_es = self.diagnose_NS_pathways()
-        self.u_effective.transpose()
-        self.v_effective.transpose()
-        self.u_effective,self.v_effective = self.v_effective,self.u_effective
+        if measure == 'effective':
+            self.u_effective.transpose()
+            self.v_effective.transpose()
+            self.u_effective,self.v_effective = self.v_effective,self.u_effective
+        elif measure == 'simple':
+            self.u_simple.transpose()
+            self.v_simple.transpose()
+            self.u_simple,self.v_simple = self.v_simple,self.u_simple
+        else: raise Exception('Unknown "measure"')
+        wn_to_en, wn_to_es, ws_to_en, ws_to_es = self.diagnose_NS_pathways(measure=measure)
+        if measure == 'effective':
+            self.u_effective.transpose()
+            self.v_effective.transpose()
+            self.u_effective,self.v_effective = self.v_effective,self.u_effective
+        elif measure == 'simple':
+            self.u_simple.transpose()
+            self.v_simple.transpose()
+            self.u_simple,self.v_simple = self.v_simple,self.u_simple
+        else: raise Exception('Unknown "measure"')
         return wn_to_en.T, wn_to_es.T, ws_to_en.T, ws_to_es.T
-    def diagnose_NS_pathway(self):
+    def diagnose_NS_pathway(self, measure='effective'):
         """Returns deepest NS pathway"""
-        se_to_ne, se_to_nw, sw_to_ne, sw_to_nw = self.diagnose_NS_pathways()
+        se_to_ne, se_to_nw, sw_to_ne, sw_to_nw = self.diagnose_NS_pathways(measure=measure)
         sw = numpy.minimum( sw_to_ne, sw_to_nw)
         se = numpy.minimum( se_to_ne, se_to_nw)
         return numpy.minimum( sw, se)
-    def diagnose_NS_pathways(self):
+    def diagnose_NS_pathways(self, measure='effective'):
         """Returns NS deep pathways"""
         # Alias
-        C,U,V = self.c_effective.low,self.u_effective.low,self.v_effective.low
+        if measure == 'effective':
+            C,U,V = self.c_effective.low,self.u_effective.low,self.v_effective.low
+        elif measure == 'simple':
+            C,U,V = self.c_simple.low,self.u_simple.low,self.v_simple.low
+        else: raise Exception('Unknown "measure"')
 
         # Cell to immediate north-south exit
         ne_exit = V[2::2,1::2]
@@ -556,44 +648,53 @@ class ThinWalls(GMesh):
         j,i = numpy.nonzero( needed & ( w<=e ) ); J,I=2*j,2*i
         U[J,I+2] = numpy.maximum( U[J,I+2], ew_deepest_connection[j,i] )
         U[J+1,I+2] = numpy.maximum( U[J+1,I+2], ew_deepest_connection[j,i] )
-    def diagnose_corner_pathways(self):
+    def diagnose_corner_pathways(self, measure='effective'):
         """Returns deepest corner pathways"""
-        sw = self.diagnose_SW_pathway()
+        sw = self.diagnose_SW_pathway(measure=measure)
         # Alias
-        C, U, V = self.c_effective, self.u_effective, self.v_effective
+        if measure == 'effective':
+            C,U,V = self.c_effective,self.u_effective,self.v_effective
+        elif measure == 'simple':
+            C,U,V = self.c_simple,self.u_simple,self.v_simple
+        else: raise Exception('Unknown "measure"')
+
         # Flip in j direction so j=S, i=E
         C.flip(axis=0)
         U.flip(axis=0)
         V.flip(axis=0)
-        nw = self.diagnose_SW_pathway()
+        nw = self.diagnose_SW_pathway(measure=measure)
         nw = numpy.flip(nw, axis=0)
         # Flip in i direction so j=S, i=W
         C.flip(axis=1)
         U.flip(axis=1)
         V.flip(axis=1)
-        ne = self.diagnose_SW_pathway()
+        ne = self.diagnose_SW_pathway(measure=measure)
         ne = numpy.flip(numpy.flip(ne, axis=0), axis=1)
         # Flip in j direction so j=N, i=W
         C.flip(axis=0)
         U.flip(axis=0)
         V.flip(axis=0)
-        se = self.diagnose_SW_pathway()
+        se = self.diagnose_SW_pathway(measure=measure)
         se = numpy.flip(se, axis=1)
         # Flip in i direction so j=N, i=E
         C.flip(axis=1)
         U.flip(axis=1)
         V.flip(axis=1)
         return sw, se, ne, nw
-    def diagnose_SW_pathway(self):
+    def diagnose_SW_pathway(self, measure='effective'):
         """Returns deepest SW pathway"""
-        sw_to_sw, sw_to_nw, se_to_sw, se_to_nw = self.diagnose_SW_pathways()
+        sw_to_sw, sw_to_nw, se_to_sw, se_to_nw = self.diagnose_SW_pathways(measure=measure)
         sw = numpy.minimum( sw_to_sw, sw_to_nw)
         se = numpy.minimum( se_to_sw, se_to_nw)
         return numpy.minimum( sw, se)
-    def diagnose_SW_pathways(self):
+    def diagnose_SW_pathways(self, measure='effective'):
         """Returns SW deep pathways"""
         # Alias
-        C,U,V = self.c_effective.low,self.u_effective.low,self.v_effective.low
+        if measure == 'effective':
+            C,U,V = self.c_effective.low,self.u_effective.low,self.v_effective.low
+        elif measure == 'simple':
+            C,U,V = self.c_simple.low,self.u_simple.low,self.v_simple.low
+        else: raise Exception('Unknown "measure"')
 
         # Cell to immediate south/west exit
         w_n_exit = U[1::2,:-1:2]
@@ -673,7 +774,7 @@ class ThinWalls(GMesh):
         U[J+1,I] = numpy.maximum( U[J+1,I], nw_deepest_connection[j,i] )
 
     def coarsen(self):
-        M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2])
+        M = ThinWalls(lon=self.lon[::2,::2],lat=self.lat[::2,::2],rfl=self.rfl-1)
         M.c_simple.ave = self.c_simple.mean4()
         M.c_simple.low = self.c_simple.min4()
         M.c_simple.hgh = self.c_simple.max4()
@@ -699,14 +800,39 @@ class ThinWalls(GMesh):
             XY = numpy.zeros( (2*self.nj+2,2*self.ni+2) )
             dr = xy[1:,1:] - xy[:-1,:-1]
             dl = xy[:-1,1:] - xy[1:,:-1]
+
             XY[::2,::2] = xy
+            # Reference to the northeast corner of the cell located to the southwest
             XY[2::2,2::2] = XY[2::2,2::2] - dr*thickness/2
+            # Southmost row
+            XY[0,::2] = XY[0,::2] - numpy.r_[dr[0,:], dr[0,-1]]*thickness/2
+            # Westmost column (excluding the southwestmost point)
+            XY[2::2,0] = XY[2::2,0] - numpy.r_[dr[1:,0] ,dr[-1,0]]*thickness/2
+
             XY[1::2,::2] = xy
+            # Reference to the southeast corner of the cell located to the northwest
             XY[1:-1:2,2::2] = XY[1:-1:2,2::2] - dl*thickness/2
+            # Westmost column
+            XY[1::2,0] = XY[1::2,0] - numpy.r_[dl[0,0],  dl[:,0]]*thickness/2
+            # Northmost row (excluding the northwestmost point)
+            XY[-1,2::2] = XY[-1,2::2] - numpy.r_[dl[-1,1:], dl[-1,-1]]*thickness/2
+
             XY[::2,1::2] = xy
+            # Reference to the northwest corner of the cell located to the southeast
             XY[2::2,1:-1:2] = XY[2::2,1:-1:2] + dl*thickness/2
+            # Eastmost column
+            XY[::2,-1] = XY[::2,-1] + numpy.r_[dl[:,-1], dl[-1,-1]]*thickness/2
+            # Southmost row (excluding the southeastmost point)
+            XY[0,1:-1:2] = XY[0,1:-1:2] + numpy.r_[dl[0,0], dl[0,:-1]]*thickness/2
+
             XY[1::2,1::2] = xy
+            # Reference to the southwest corner of the cell located to the northeast
             XY[1:-1:2,1:-1:2] = XY[1:-1:2,1:-1:2] + dr*thickness/2
+            # Northmost row
+            XY[-1,1::2] = XY[-1,1::2] + numpy.r_[dr[-1,0], dr[-1,:]]*thickness/2
+            # Eastmost column (excluding the northeastmost point)
+            XY[1:-1:2,-1] = XY[1:-1:2,-1] + numpy.r_[dr[0,-1], dr[:-1,-1]]*thickness/2
+
             return XY
         lon = copy_coord(self.lon)
         lat = copy_coord(self.lat)
@@ -717,14 +843,14 @@ class ThinWalls(GMesh):
             tmp[1::2,::2] = u
             tmp[::2,1::2] = v
             return axis.pcolormesh(lon, lat, tmp, *args, **kwargs)
-        if measure is 'simple':
+        if measure=='simple':
             c,u,v = self.c_simple, self.u_simple, self.v_simple
-        elif measure is 'effective':
+        elif measure=='effective':
             c,u,v = self.c_effective, self.u_effective, self.v_effective
         else: raise Exception('Unknown "measure"')
-        if metric is 'mean': return pcol_elev( c.ave, u.ave, v.ave )
-        elif metric is 'min': return pcol_elev( c.low, u.low, v.low )
-        elif metric is 'max': return pcol_elev( c.hgh, u.hgh, v.hgh )
+        if metric=='mean': return pcol_elev( c.ave, u.ave, v.ave )
+        elif metric=='min': return pcol_elev( c.low, u.low, v.low )
+        elif metric=='max': return pcol_elev( c.hgh, u.hgh, v.hgh )
         else: raise Exception('Unknown "metric"')
     def plot_grid(self, axis, *args, **kwargs):
         """Plots ThinWalls mesh."""
