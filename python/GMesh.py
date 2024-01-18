@@ -368,3 +368,37 @@ class GMesh:
             self.height = np.zeros((self.nj+1,self.ni+1))
         self.height[:,:] = zs[nns_j[:,:],nns_i[:,:]]
         return
+
+    def find_source_spanning_slices(self, lon, lat, debug=False):
+        """Finds the slice ranges of the cell data, described by lon and lat cell-center coordinates, that span the mesh."""
+
+        assert is_mesh_uniform(lon,lat), 'Grid (lon,lat) is not uniform, this method will not work properly'
+        assert len(lon.shape) == len(lat.shape), "lon and lat must both be either 1D or 2D"
+        if len(lon.shape)==2:
+            # Convert to 1D arrays
+            lon,lat = lon[0,:],lat[:,0]
+
+        dellon, dellat = lon[1]-lon[0], lat[1]-lat[0]
+        if debug: print('dellon,dellat =',dellon,dellat)
+
+        if debug: print('Target lon min/max =', lon.min(), lon.max())
+        lon0, lon1 = self.lon.min(), self.lon.max()
+        if debug: print('Self lon min/max =',lon0,lon1)
+        i0 = np.where( (lon[:] - 0.5*dellon <= lon0) & (lon0 <= lon[:] + 0.5*dellon) )[0][0]
+        i1 = np.where( (lon[:] - 0.5*dellon <= lon1) & (lon1 <= lon[:] + 0.5*dellon) )[0][0]
+
+        lat0, lat1 = self.lat.min(), self.lat.max()
+        if debug: print('lat0,lat1 =',lat0,lat1)
+        j0 = np.where( (lat[:] - 0.5*dellat <= lat0) & (lat0 <= lat[:] + 0.5*dellat) )[0][0]
+        j1 = np.where( (lat[:] - 0.5*dellat <= lat1) & (lat1 <= lat[:] + 0.5*dellat) )[0][0]
+
+        if debug: print('lon[i0],lon[i1],lat[j0],lat[j1] =',lon[i0],lon[i1],lat[j0],lat[j1])
+        assert lon[i0] - 0.5*dellon <= self.lon.min(), "min lon of source is not to the west of target grid"
+        assert lon[i1] + 0.5*dellon >= self.lon.max(), "max lon of source is not to the east of target grid"
+        assert i1>i0, "Zonal indices are swapped"
+        assert lat[j0] - 0.5*dellat <= self.lat.min(), "min lat of source is not to the south of target grid"
+        assert lat[j1] + 0.5*dellat >= self.lat.max(), "max lat of source is not to the north of target grid"
+        assert j1>j0, "Meridional range is less that 1!!"
+
+        return slice(i0,i1+1), slice(j0,j1+1)
+
