@@ -264,9 +264,11 @@ class GMesh:
                                    + self.height[1::2,:-1:2]
                                    + self.height[:-1:2,1::2])
 
-    def find_nn_uniform_source(self, lon, lat, use_center=False):
-        """Returns the i,j arrays for the indexes of the nearest neighbor point to grid (lon,lat)"""
+    def find_nn_uniform_source(self, lon, lat, use_center=True, debug=False):
+        """Returns the i,j arrays for the indexes of the nearest neighbor centers at (lon,lat) to the self nodes
+        The option use_center=True is default so that lon,lat are cell-center coordinates."""
         assert is_mesh_uniform(lon,lat), 'Grid (lon,lat) is not uniform, this method will not work properly'
+        assert len(lon.shape) == len(lat.shape), "lon and lat must both be either 1D or 2D"
         if len(lon.shape)==2:
             # Convert to 1D arrays
             lon,lat = lon[0,:],lat[:,0]
@@ -281,17 +283,31 @@ class GMesh:
             lon_tgt, lat_tgt = self.interp_center_coords(work_in_3d=True)
         else:
             lon_tgt, lat_tgt = self.lon, self.lat
+            raise Exception("Are you sure we should not have use_center=True?")
         # Nearest integer (the upper one if equidistant)
         nn_i = np.floor(np.mod(lon_tgt-lon[0]+0.5*dellon,360)/dellon)
         nn_j = np.floor(0.5+(lat_tgt-lat[0])/dellat)
-        nn_j = np.minimum(nn_j, snj-1)
+        #### nn_j = np.minimum(nn_j, snj-1) # This line should not be needed ...
+        assert nn_j.max() <= snj-1, "Apparently a commented out line was hiding a bug!"
+        nn_i, nn_j = nn_i.astype(int), nn_j.astype(int)
+        if debug:
+            print('Self lon =',lon[0],'...',lon[-1])
+            print('Self lat =',lat[0],'...',lat[-1])
+            print('Source ni,snj =',sni,snj)
+            print('Source dellon,dellat =',dellon,dellat)
+            print('Target lon =',lon_tgt)
+            print('Target lat =',lat_tgt)
+            print('Source lon =',lon[nn_i])
+            print('Source lat =',lat[nn_j])
+            print('NN i =',nn_i)
+            print('NN j =',nn_j)
         assert nn_j.min()>=0, 'Negative j index calculated! j='+str(nn_j.min())
         assert nn_j.max()<snj, 'Out of bounds j index calculated! j='+str(nn_j.max())
         assert nn_i.min()>=0, 'Negative i index calculated! i='+str(nn_i.min())
         assert nn_i.max()<sni, 'Out of bounds i index calculated! i='+str(nn_i.max())
-        return nn_i.astype(int),nn_j.astype(int)
+        return nn_i,nn_j
 
-    def source_hits(self, xs, ys, use_center=False, singularity_radius=0.25):
+    def source_hits(self, xs, ys, use_center=True, singularity_radius=0.25):
         """Returns an mask array of 1's if a cell with center (xs,ys) is intercepted by a node
            on the mesh, 0 if no node falls in a cell"""
         # Indexes of nearest xs,ys to each node on the mesh
@@ -303,7 +319,7 @@ class GMesh:
         return hits
 
     def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, fixed_refine_level=-1, work_in_3d=True,
-                    use_center=False, resolution_limit=False, mask_res=[], singularity_radius=0.25, verbose=True):
+                    use_center=True, resolution_limit=False, mask_res=[], singularity_radius=0.25, verbose=True):
         """Repeatedly refines the mesh until all cells in the source grid are intercepted by mesh nodes.
            Returns a list of the refined meshes starting with parent mesh."""
         GMesh_list, this = [self], self
@@ -341,8 +357,9 @@ class GMesh:
 
         return GMesh_list
 
-    def project_source_data_onto_target_mesh(self,xs,ys,zs,use_center=False):
+    def project_source_data_onto_target_mesh(self,xs,ys,zs,use_center=True):
         """Returns the array on target mesh with values equal to the nearest-neighbor source point data"""
+        assert len(xs.shape) == len(ys.shape), "xs,ys must both be either 1D or 2D"
         # if xs.shape != ys.shape: raise Exception('xs and ys must be the same shape')
         nns_i,nns_j = self.find_nn_uniform_source(xs,ys,use_center=use_center)
         if use_center:
