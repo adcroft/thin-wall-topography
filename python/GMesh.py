@@ -259,10 +259,8 @@ class GMesh:
         if(self.rfl == 0):
             raise Exception('Coarsest grid, no more coarsening possible!')
 
-        coarser_mesh.height = 0.25*( self.height[:-1:2,:-1:2]
-                                   + self.height[1::2,1::2]
-                                   + self.height[1::2,:-1:2]
-                                   + self.height[:-1:2,1::2])
+        coarser_mesh.height = 0.25 * ( ( self.height[:-1:2,:-1:2] + self.height[1::2,1::2] )
+                                     + ( self.height[1::2,:-1:2] + self.height[:-1:2,1::2] ) )
 
     def find_nn_uniform_source(self, lon, lat, use_center=True, debug=False):
         """Returns the i,j arrays for the indexes of the nearest neighbor centers at (lon,lat) to the self nodes
