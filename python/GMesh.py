@@ -3,21 +3,49 @@
 import numpy as np
 import time
 
+def is_coord_uniform(coord, tol=1.e-5):
+    """Returns True if the coordinate "coord" is uniform along the first axis, and False otherwise
+
+    tol is the allowed fractional variation in spacing, i.e. ( variation in delta ) / delta < tol"""
+    eps = np.finfo( coord.dtype ).eps # Precision of datatype
+    # abscoord = np.abs( coord ) # Magnitude of coordinate values
+    # abscoord = np.maximum( abscoord[1:], abscoord[:-1] ) # Largest magnitude of coordinate used at centers
+    # roundoff = eps * abscoord # This is the roundoff error in calculating "coord[1:] - coord[:-1]"
+    delta = np.abs( coord[1:] - coord[:-1] ) # Spacing along first axis
+    roundoff = tol * delta[0] # Assuming delta is approximately uniform, use first value to estimate allowed variance
+    derror = np.abs( delta - delta.flatten()[0] ) # delta should be uniform so delta - delta[0] should be zero
+    return np.all( derror <= roundoff )
+
 def is_mesh_uniform(lon,lat):
     """Returns True if the input grid (lon,lat) is uniform and False otherwise"""
-    def compare(array):
-        eps = np.finfo( array.dtype ).eps # Precision of datatype
-        delta = np.abs( array[1:] - array[:-1] ) # Difference along first axis
-        error = np.abs( array )
-        error = np.maximum( error[1:], error[:-1] ) # Error in difference
-        derror = np.abs( delta - delta.flatten()[0] ) # Tolerance to which comparison can be made
-        return np.all( derror < ( error + error.flatten()[0] ) )
     assert len(lon.shape) == len(lat.shape), "Arguments lon and lat must have the same rank"
-    if len(lon.shape)==2: # 2D arralat
+    if len(lon.shape)==2: # 2D array
         assert lon.shape == lat.shape, "Arguments lon and lat must have the same shape"
-    if len(lon.shape)>2 or len(lat.shape)>2:
-        raise Exception("Arguments must be either both be 1D or both be 2D arralat")
-    return compare(lat) and compare(lon.T)
+    assert len(lon.shape)<3 and len(lat.shape)<3, "Arguments must be either both be 1D or both be 2D arralat"
+    return is_coord_uniform(lat) and is_coord_uniform(lon.T)
+
+def reg_cell_index_of_x( coord, x, debug=True ):
+    assert len(coord.shape) == 1, "coords must be 1D"
+    assert is_coord_uniform( coord ), "coord must be uniform"
+    k = np.argmin( np.abs( coord[:-1] ) ) # Index of smallest magnitude coordinate (avoid allowing last cell)
+    if debug: print('cell with smallest magnitude coord =',k)
+    dc = coord[1:] - coord[:-1] # Most accurate estimate of delta (using smallest magnitude coordinate values)
+    rdc = 1. / dc[k]
+    if debug: print('delta coord =',dc[k],'1/dc =',rdc)
+    assert dc[k]>0, "coord must increase with increasing index"
+    c_left, c_right = coord[0] - 0.5 * dc[k], coord[-1] + 0.5 * dc[k]
+    if debug: print('left,right =',c_left,c_right)
+    ind_c = rdc * ( x - c_left )
+    if debug: print('non-dim (x-x0)/dx =',ind_c)
+    ind_c = ind_c.astype(int)
+    periodic_lon = np.abs( ( c_right - c_left ) - 360 ) < 1.e-5 * dc[k] # Detect if this is global longitude in degrees)
+    if debug: print('periodic =',periodic_lon)
+    if periodic_lon:
+        ind_c = np.mod( ind_c, len(coord) )
+    else:
+        ind_c = np.maximum( 0, np.minimum( len(coord)-1, ind_c ) )
+    if debug: print('ind_c=',ind_c)
+    return ind_c
 
 class GMesh:
     """Describes 2D meshes for ESMs.
@@ -255,7 +283,7 @@ class GMesh:
 
         return self
 
-    def coarsenby2(self, coarser_mesh, timers=False):
+    def coarsenby2(self, coarser_mesh, debug=False, timers=False):
         """Set the height for lower level Mesh by coarsening"""
         if(self.rfl == 0):
             raise Exception('Coarsest grid, no more coarsening possible!')
@@ -268,34 +296,24 @@ class GMesh:
     def find_nn_uniform_source(self, lon, lat, use_center=True, debug=False):
         """Returns the i,j arrays for the indexes of the nearest neighbor centers at (lon,lat) to the self nodes
         The option use_center=True is default so that lon,lat are cell-center coordinates."""
+
         assert is_mesh_uniform(lon,lat), 'Grid (lon,lat) is not uniform, this method will not work properly'
         assert len(lon.shape) == len(lat.shape), "lon and lat must both be either 1D or 2D"
         if len(lon.shape)==2:
             # Convert to 1D arrays
             lon,lat = lon[0,:],lat[:,0]
-        sni,snj =lon.shape[0],lat.shape[0] # Shape of source
-        # Spacing on uniform mesh
-        dellon, dellat = (lon[-1]-lon[0])/(sni-1), (lat[-1]-lat[0])/(snj-1)
-        # assert self.lat.max()<=lat.max()+0.5*dellat, 'Mesh has latitudes above range of regular grid '+str(self.lat.max())+' '+str(lat.max()+0.5*dellat)
-        # assert self.lat.min()>=lat.min()-0.5*dellat, 'Mesh has latitudes below range of regular grid '+str(self.lat.min())+' '+str(lat.min()-0.5*dellat)
-        if abs( (lon[-1]-lon[0])-360 )<=360.*np.finfo( lon.dtype ).eps:
-            sni-=1 # Account for repeated longitude
+        sni,snj =lon.shape[0],lat.shape[0] # Shape of source cell centered data
         if use_center:
+            # Searching for source cells that the self centers fall into
             lon_tgt, lat_tgt = self.interp_center_coords(work_in_3d=True)
         else:
+            # Searching for source cells that the self nodes fall into
             lon_tgt, lat_tgt = self.lon, self.lat
-            raise Exception("Are you sure we should not have use_center=True?")
-        # Nearest integer (the upper one if equidistant)
-        nn_i = np.floor(np.mod(lon_tgt-lon[0]+0.5*dellon,360)/dellon)
-        nn_j = np.floor(0.5+(lat_tgt-lat[0])/dellat)
-        #### nn_j = np.minimum(nn_j, snj-1) # This line should not be needed ...
-        assert nn_j.max() <= snj-1, "Apparently a commented out line was hiding a bug!"
-        nn_i, nn_j = nn_i.astype(int), nn_j.astype(int)
+        nn_i = reg_cell_index_of_x( lon, lon_tgt, debug=debug )
+        nn_j = reg_cell_index_of_x( lat, lat_tgt, debug=debug )
         if debug:
             print('Self lon =',lon[0],'...',lon[-1])
             print('Self lat =',lat[0],'...',lat[-1])
-            print('Source ni,snj =',sni,snj)
-            print('Source dellon,dellat =',dellon,dellat)
             print('Target lon =',lon_tgt)
             print('Target lat =',lat_tgt)
             print('Source lon =',lon[nn_i])
@@ -419,27 +437,5 @@ class GMesh:
             # Convert to 1D arrays
             lon,lat = lon[0,:],lat[:,0]
 
-        dellon, dellat = lon[1]-lon[0], lat[1]-lat[0]
-        if debug: print('dellon,dellat =',dellon,dellat)
-
-        if debug: print('Target lon min/max =', lon.min(), lon.max())
-        lon0, lon1 = self.lon.min(), self.lon.max()
-        if debug: print('Self lon min/max =',lon0,lon1)
-        i0 = np.where( (lon[:] - 0.5*dellon <= lon0) & (lon0 <= lon[:] + 0.5*dellon) )[0][0]
-        i1 = np.where( (lon[:] - 0.5*dellon <= lon1) & (lon1 <= lon[:] + 0.5*dellon) )[0][0]
-
-        lat0, lat1 = self.lat.min(), self.lat.max()
-        if debug: print('lat0,lat1 =',lat0,lat1)
-        j0 = np.where( (lat[:] - 0.5*dellat <= lat0) & (lat0 <= lat[:] + 0.5*dellat) )[0][0]
-        j1 = np.where( (lat[:] - 0.5*dellat <= lat1) & (lat1 <= lat[:] + 0.5*dellat) )[0][0]
-
-        if debug: print('lon[i0],lon[i1],lat[j0],lat[j1] =',lon[i0],lon[i1],lat[j0],lat[j1])
-        assert lon[i0] - 0.5*dellon <= self.lon.min(), "min lon of source is not to the west of target grid"
-        assert lon[i1] + 0.5*dellon >= self.lon.max(), "max lon of source is not to the east of target grid"
-        assert i1>i0, "Zonal indices are swapped"
-        assert lat[j0] - 0.5*dellat <= self.lat.min(), "min lat of source is not to the south of target grid"
-        assert lat[j1] + 0.5*dellat >= self.lat.max(), "max lat of source is not to the north of target grid"
-        assert j1>j0, "Meridional range is less that 1!!"
-
-        return slice(i0,i1+1), slice(j0,j1+1)
-
+        nn_i, nn_j = self.find_nn_uniform_source(lon, lat, use_center=False, debug=debug)
+        return slice( nn_i.min(), nn_i.max()+1 ), slice( nn_j.min(), nn_j.max() )
