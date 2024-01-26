@@ -439,3 +439,48 @@ class GMesh:
 
         nn_i, nn_j = self.find_nn_uniform_source(lon, lat, use_center=False, debug=debug)
         return slice( nn_i.min(), nn_i.max()+1 ), slice( nn_j.min(), nn_j.max() )
+
+class RegularCoord:
+    """Container for uniformly spaced global cell center coordinate parameters
+
+    For use with uniformly gridded data that has cell center global coordinates"""
+    def __init__( self, n, origin, periodic, degppi=180 ):
+        """Create a RegularCoord
+        n         is number of cells;
+        origin    is the coordinate on the left edge (not first);
+        periodic  distinguishes between longitude and latitude
+        """
+        self.n = n # Global parameter
+        self.periodic = periodic # Global parameter
+        if periodic: self.delta, self.rdelta = ( 2 * degppi ) / n, n / ( 2 * degppi )  # Global parameter
+        else: self.delta, self.rdelta = degppi / n, n / degppi # Global parameter
+        self.origin = origin # Global parameter
+        self.offset = np.floor( self.rdelta * self.origin ).astype(int) # Global parameter
+        self.rem = np.mod( self.rdelta * self.origin, 1 ) # Global parameter ( needed for odd n)
+        self.start = 0 # Special for each subset
+        self.stop = self.n # Special for each subset
+    def __repr__( self ):
+        return '<RegularCoord n={}, dx={}, rdx={}, x0={}, io={}, rem={}, is-ie={}-{}, periodic={}>'.format( \
+            self.n, self.delta, self.rdelta, self.origin, self.offset, self.rem, self.start, self.stop, self.periodic)
+    def subset( self, slc ):
+        """Subset a RegularCoord with slice "slc" """
+        Is, Ie = 0, self.n
+        if slc.start is not None: Is = slc.start
+        if slc.stop is not None: Ie = slc.stop
+        S = RegularCoord( self.n, self.origin, self.periodic ) # This creates a copy of "self"
+        S.start, S.stop = Is, Ie
+        return S
+    def indices( self, x ):
+        """Return indices of cells that contain x
+
+        If RegularCoord is non-periodic (i.e. latitude), out of range values of "x" will be clipped to -90..90 .
+        If regularCoord is periodic, any value of x will be globally wrapped.
+        If RegularCoord is a subset, then "x" will be clipped to the bounds of the subset (after periodic wrapping).
+        """
+        ind = np.floor( self.rdelta * np.array(x) - self.rem ).astype(int) - self.offset
+        if self.periodic:
+            ind = np.mod( ind, self.n )
+        else:
+            ind = np.maximum( 0, np.minimum( self.n - 1, ind ) )
+        ind = np.maximum( self.start, np.minimum( self.stop - 1, ind ) ) - self.start
+        return ind
