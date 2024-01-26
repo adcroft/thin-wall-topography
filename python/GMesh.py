@@ -535,3 +535,5 @@ class UniformEDS:
         """Returns the slices defining the bounding box of data hit by (lon,lat)"""
         si, sj = self.indices( lon, lat )
         return slice( si.min(), si.max() +1 ), slice( sj.min(), sj.max() + 1 )
+    def plot(self, axis, **kwargs):
+        return axis.pcolormesh( self.lonq, self.latq, self.data )
