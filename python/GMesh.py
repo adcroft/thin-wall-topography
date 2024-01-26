@@ -484,3 +484,54 @@ class RegularCoord:
             ind = np.maximum( 0, np.minimum( self.n - 1, ind ) )
         ind = np.maximum( self.start, np.minimum( self.stop - 1, ind ) ) - self.start
         return ind
+
+class UniformEDS:
+    """Container for a uniform elevation dataset"""
+    def __init__( self, lon, lat, elevation=None ):
+        """(lon,lat) are cell centers and 1D with combined shape equalt that of elevation."""
+        assert len(lon.shape) == 1, "Longitude must be 1D"
+        assert len(lat.shape) == 1, "Latitude must be 1D"
+        self.ni = len(lon)
+        self.nj = len(lat)
+        # Store coordinates for posterity
+        self.lonh, self.lath = lon, lat
+
+        if elevation is None: # We allow the creation of a "blank" UniformEDS when subsetting
+            self.lon_coord, self.lat_coord = None, None
+            self.lonq, self.latq = None, None
+            self.data = np.zeros((0))
+        else: # This is the real constructor
+            assert len(lon) == elevation.shape[1], "Inconsistent longitude shape"
+            assert len(lat) == elevation.shape[0], "Inconsistent latitude shape"
+            dlon, dlat = 360. / self.ni, 180 / self.nj
+            assert np.abs( lon[-1] - lon[0] - 360 + dlon ) < 1.e-5 * dlon, "longitude does not appear to be global"
+            assert np.abs( lat[-1] - lat[0] - 180 + dlat ) < 1.e-5 * dlat, "latitude does not appear to be global"
+            lon0 = np.floor( lon[0] - 0.5 * dlon + 0.5 ) # Calculating the phase this way restricts ourselves to data starting on integer values
+            print('LON0 =',lon0)
+            assert np.abs( lon[0] - 0.5 * dlon - lon0 ) < 1.e-9 * dlon, "edge of longitude is not a round number"
+            assert np.abs( lat[0] - 0.5 * dlat + 90 ) < 1.e-9 * dlat, "edge of latitude is not 90"
+            self.lon_coord = RegularCoord( self.ni, lon0, True)
+            self.lat_coord = RegularCoord( self.nj, -90, False)
+            # Calculate node coordinates for convenient plotting
+            self.lonq = lon0 + dlon * ( np.arange( self.ni + 1 ) )
+            self.latq = dlat * ( np.arange( self.nj + 1 ) - 0.5 * self.nj )
+            self.data = elevation
+    def __repr__( self ):
+        return '<UniformEDS {} x {}\nlon = {}\n{}\n{}\nlat = {}\n{}\n{}\ndata = {}>'.format( \
+            self.ni, self.nj, self.lon_coord, self.lonh, self.lonq, self.lat_coord, self.lath, self.latq, self.data.shape )
+    def subset( self, islice, jslice ):
+        """Subset a UniformEDS as [jslice,islice]"""
+        S = UniformEDS( self.lonh[islice], self.lath[jslice] )
+        S.lon_coord = self.lon_coord.subset(islice)
+        S.lat_coord = self.lat_coord.subset(jslice)
+        S.lonq = self.lonq[ slice( islice.start, islice.stop + 1 ) ]
+        S.latq = self.latq[ slice( jslice.start, jslice.stop + 1 ) ]
+        S.data = self.data[jslice, islice]
+        return S
+    def indices( self, lon, lat ):
+        """Return the i,j indices of cells in which (lon,lat) fall"""
+        return self.lon_coord.indices( lon ), self.lat_coord.indices( lat )
+    def bb_slices( self, lon, lat ):
+        """Returns the slices defining the bounding box of data hit by (lon,lat)"""
+        si, sj = self.indices( lon, lat )
+        return slice( si.min(), si.max() +1 ), slice( sj.min(), sj.max() + 1 )
