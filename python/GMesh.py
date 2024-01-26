@@ -18,6 +18,30 @@ def is_mesh_uniform(lon,lat):
         raise Exception("Arguments must be either both be 1D or both be 2D arralat")
     return compare(lat) and compare(lon.T)
 
+class IntCoord(object):
+    """
+    A type for integerized coordinate
+
+    start : float
+        Global starting lon/lat
+    delta : float
+        Resolution (in deg)
+    N : int
+        Total number of grid point
+    n0 : int, optional
+        Starting index of the subset
+    n1 : int, optional
+        Ending index of the subset
+    """
+    def __init__(self, start, delta, N, n0=0, n1=None):
+        self.start = start
+        self.delta = delta
+        self.N = N
+        self.n0 = n0
+        self.n1 = n1
+        if n1 is None:
+            self.n1 = self.N
+
 class GMesh:
     """Describes 2D meshes for ESMs.
 
@@ -266,24 +290,18 @@ class GMesh:
 
     def find_nn_uniform_source(self, lon, lat, use_center=False):
         """Returns the i,j arrays for the indexes of the nearest neighbor point to grid (lon,lat)"""
-        assert is_mesh_uniform(lon,lat), 'Grid (lon,lat) is not uniform, this method will not work properly'
-        if len(lon.shape)==2:
-            # Convert to 1D arrays
-            lon,lat = lon[0,:],lat[:,0]
-        sni,snj =lon.shape[0],lat.shape[0] # Shape of source
+        sni,snj = lon.N,lat.N # Shape of source
         # Spacing on uniform mesh
-        dellon, dellat = (lon[-1]-lon[0])/(sni-1), (lat[-1]-lat[0])/(snj-1)
-        assert self.lat.max()<=lat.max()+0.5*dellat, 'Mesh has latitudes above range of regular grid '+str(self.lat.max())+' '+str(lat.max()+0.5*dellat)
-        assert self.lat.min()>=lat.min()-0.5*dellat, 'Mesh has latitudes below range of regular grid '+str(self.lat.min())+' '+str(lat.min()-0.5*dellat)
-        if abs( (lon[-1]-lon[0])-360 )<=360.*np.finfo( lon.dtype ).eps:
-            sni-=1 # Account for repeated longitude
+        dellon, dellat = lon.delta, lat.delta
+        assert self.lat.max()<=lat.start+(lat.n1+0.5)*lat.delta, 'Mesh has latitudes above range of regular grid '+str(self.lat.max())+' '+str(lat.max()+0.5*dellat)
+        assert self.lat.min()>=lat.start+(lat.n0-0.5)*lat.delta, 'Mesh has latitudes below range of regular grid '+str(self.lat.min())+' '+str(lat.min()-0.5*dellat)
         if use_center:
             lon_tgt, lat_tgt = self.interp_center_coords(work_in_3d=True)
         else:
             lon_tgt, lat_tgt = self.lon, self.lat
         # Nearest integer (the upper one if equidistant)
-        nn_i = np.floor(np.mod(lon_tgt-lon[0]+0.5*dellon,360)/dellon)
-        nn_j = np.floor(0.5+(lat_tgt-lat[0])/dellat)
+        nn_i = np.floor(np.mod(lon_tgt-lon.start+0.5*dellon,360)/dellon)
+        nn_j = np.floor(0.5+(lat_tgt-lat.start)/dellat)
         nn_j = np.minimum(nn_j, snj-1)
         assert nn_j.min()>=0, 'Negative j index calculated! j='+str(nn_j.min())
         assert nn_j.max()<snj, 'Out of bounds j index calculated! j='+str(nn_j.max())
@@ -296,10 +314,12 @@ class GMesh:
            on the mesh, 0 if no node falls in a cell"""
         # Indexes of nearest xs,ys to each node on the mesh
         i,j = self.find_nn_uniform_source(xs,ys,use_center=use_center)
-        sni,snj = xs.shape[0],ys.shape[0] # Shape of source
+        sni,snj = np.mod(xs.n1-xs.n0,xs.N), ys.n1-ys.n0 # Shape of source
         hits = np.zeros((snj,sni))
-        if singularity_radius>0: hits[np.abs(ys)>90-singularity_radius] = 1
-        hits[j,i] = 1
+        if singularity_radius>0:
+            iy = (np.ceil((90-singularity_radius-ys.start)/ys.delta)-ys.n0).astype(int)
+            hits[iy:] = 1
+        hits[j-ys.n0, np.mod(i-xs.n0, xs.N)] = 1
         return hits
 
     def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, fixed_refine_level=-1, work_in_3d=True,
@@ -312,8 +332,7 @@ class GMesh:
         if verbose: print('Refine level', this.rfl, repr(this), 'Hit', nhits, 'out of', hits.size, 'cells (%.4f'%mb,'Mb)')
         fine = False
         if resolution_limit:
-            sni,snj = src_lon.shape[0],src_lat.shape[0]
-            dellon_s, dellat_s = (src_lon[-1]-src_lon[0])/(sni-1), (src_lat[-1]-src_lat[0])/(snj-1)
+            dellon_s, dellat_s = src_lon.delta,src_lat.delta
             del_lam, del_phi = this.coarsest_resolution(mask_idx=mask_res)
             dellon_t, dellat_t = del_lam.max(), del_phi.max()
             fine = (dellon_t<=dellon_s) and (dellat_t<=dellat_s)
@@ -349,5 +368,5 @@ class GMesh:
             self.height = np.zeros((self.nj,self.ni))
         else:
             self.height = np.zeros((self.nj+1,self.ni+1))
-        self.height[:,:] = zs[nns_j[:,:],nns_i[:,:]]
+        self.height[:,:] = zs[nns_j[:,:]-ys.n0, np.mod(nns_i[:,:]-xs.n0, xs.N)]
         return
