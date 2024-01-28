@@ -24,28 +24,20 @@ def is_mesh_uniform(lon,lat):
     assert len(lon.shape)<3 and len(lat.shape)<3, "Arguments must be either both be 1D or both be 2D arralat"
     return is_coord_uniform(lat) and is_coord_uniform(lon.T)
 
-def reg_cell_index_of_x( coord, x, debug=True ):
-    assert len(coord.shape) == 1, "coords must be 1D"
-    assert is_coord_uniform( coord ), "coord must be uniform"
-    k = np.argmin( np.abs( coord[:-1] ) ) # Index of smallest magnitude coordinate (avoid allowing last cell)
-    if debug: print('cell with smallest magnitude coord =',k)
-    dc = coord[1:] - coord[:-1] # Most accurate estimate of delta (using smallest magnitude coordinate values)
-    rdc = 1. / dc[k]
-    if debug: print('delta coord =',dc[k],'1/dc =',rdc)
-    assert dc[k]>0, "coord must increase with increasing index"
-    c_left, c_right = coord[0] - 0.5 * dc[k], coord[-1] + 0.5 * dc[k]
-    if debug: print('left,right =',c_left,c_right)
-    ind_c = rdc * ( x - c_left )
-    if debug: print('non-dim (x-x0)/dx =',ind_c)
-    ind_c = ind_c.astype(int)
-    periodic_lon = np.abs( ( c_right - c_left ) - 360 ) < 1.e-5 * dc[k] # Detect if this is global longitude in degrees)
-    if debug: print('periodic =',periodic_lon)
-    if periodic_lon:
-        ind_c = np.mod( ind_c, len(coord) )
-    else:
-        ind_c = np.maximum( 0, np.minimum( len(coord)-1, ind_c ) )
-    if debug: print('ind_c=',ind_c)
-    return ind_c
+def pfactor(n):
+    primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 0] # 0 causes error
+    for p in primes:
+        assert p > 0, "Ran out of primes - use a more robust method ..."
+        if n % p == 0:
+            if n == p:
+                return [ p ]
+            else:
+                x = pfactor( n // p )
+                x.append( p )
+                return x
+        if p * p > n:
+            return [ n ]
+    return [ n ]
 
 class GMesh:
     """Describes 2D meshes for ESMs.
@@ -131,11 +123,6 @@ class GMesh:
             self.area = None
 
         self.rfl = rfl #refining level
-
-    # def read_center_coords(self, lont, latt):
-    #     if lont.shape != (self.nj,self.ni): raise Exception('Cell center lon has the wrong size')
-    #     if latt.shape != (self.nj,self.ni): raise Exception('Cell center lat has the wrong size')
-    #     self.lont, self.latt = lont, latt
 
     def __copy__(self):
         return GMesh(shape = self.shape, lon=self.lon, lat=self.lat, area=self.area)
@@ -293,24 +280,17 @@ class GMesh:
                                      + ( self.height[1::2,:-1:2] + self.height[:-1:2,1::2] ) )
         if timers: gtic = GMesh._toc(gtic, "Whole process")
 
-    def find_nn_uniform_source(self, lon, lat, use_center=True, debug=False):
+    def find_nn_uniform_source(self, eds, use_center=True, debug=False):
         """Returns the i,j arrays for the indexes of the nearest neighbor centers at (lon,lat) to the self nodes
         The option use_center=True is default so that lon,lat are cell-center coordinates."""
 
-        assert is_mesh_uniform(lon,lat), 'Grid (lon,lat) is not uniform, this method will not work properly'
-        assert len(lon.shape) == len(lat.shape), "lon and lat must both be either 1D or 2D"
-        if len(lon.shape)==2:
-            # Convert to 1D arrays
-            lon,lat = lon[0,:],lat[:,0]
-        sni,snj =lon.shape[0],lat.shape[0] # Shape of source cell centered data
         if use_center:
             # Searching for source cells that the self centers fall into
             lon_tgt, lat_tgt = self.interp_center_coords(work_in_3d=True)
         else:
             # Searching for source cells that the self nodes fall into
             lon_tgt, lat_tgt = self.lon, self.lat
-        nn_i = reg_cell_index_of_x( lon, lon_tgt, debug=debug )
-        nn_j = reg_cell_index_of_x( lat, lat_tgt, debug=debug )
+        nn_i,nn_j = eds.indices( lon_tgt, lat_tgt )
         if debug:
             print('Self lon =',lon[0],'...',lon[-1])
             print('Self lat =',lat[0],'...',lat[-1])
@@ -321,29 +301,29 @@ class GMesh:
             print('NN i =',nn_i)
             print('NN j =',nn_j)
         assert nn_j.min()>=0, 'Negative j index calculated! j='+str(nn_j.min())
-        assert nn_j.max()<snj, 'Out of bounds j index calculated! j='+str(nn_j.max())
+        assert nn_j.max()<eds.nj, 'Out of bounds j index calculated! j='+str(nn_j.max())
         assert nn_i.min()>=0, 'Negative i index calculated! i='+str(nn_i.min())
-        assert nn_i.max()<sni, 'Out of bounds i index calculated! i='+str(nn_i.max())
+        assert nn_i.max()<eds.ni, 'Out of bounds i index calculated! i='+str(nn_i.max())
         return nn_i,nn_j
 
-    def source_hits(self, xs, ys, use_center=True, singularity_radius=0.25):
+    def source_hits(self, eds, use_center=True, singularity_radius=0.25):
         """Returns an mask array of 1's if a cell with center (xs,ys) is intercepted by a node
            on the mesh, 0 if no node falls in a cell"""
         # Indexes of nearest xs,ys to each node on the mesh
-        i,j = self.find_nn_uniform_source(xs,ys,use_center=use_center)
-        sni,snj = xs.shape[0],ys.shape[0] # Shape of source
-        hits = np.zeros((snj,sni))
-        if singularity_radius>0: hits[np.abs(ys)>90-singularity_radius] = 1
+        i,j = self.find_nn_uniform_source(eds, use_center=use_center)
+        hits = np.zeros((eds.nj,eds.ni))
+        if singularity_radius>0: hits[np.abs(eds.lath)>90-singularity_radius,:] = 1
         hits[j,i] = 1
         return hits
 
     def _toc(tic, label):
         if tic is not None:
-            dt = time.time_ns() - tic
-            print( '{:>10}ms : {}'.format( dt // 1000000, label) )
+            dt = ( time.time_ns() - tic ) // 1000000
+            if dt<9000: print( '{:>10}ms : {}'.format( dt, label) )
+            else: print( '{:>10}secs : {}'.format( dt / 1000, label) )
         return time.time_ns()
 
-    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=32000, fixed_refine_level=0, work_in_3d=True,
+    def refine_loop(self, eds, max_stages=32, max_mb=32000, fixed_refine_level=0, work_in_3d=True,
                     use_center=True, resolution_limit=True, mask_res=[], singularity_radius=0.25, verbose=True, timers=False):
         """Repeatedly refines the mesh until all cells in the source grid are intercepted by mesh nodes.
            Returns a list of the refined meshes starting with parent mesh."""
@@ -351,13 +331,12 @@ class GMesh:
         GMesh_list, this = [self], self
         converged = False
         if fixed_refine_level<1:
-            hits = this.source_hits(src_lon, src_lat, use_center=use_center, singularity_radius=singularity_radius)
+            hits = this.source_hits(eds, use_center=use_center, singularity_radius=singularity_radius)
             nhits, prev_hits = hits.sum().astype(int), 0
             converged = converged or np.all(hits) or (nhits==prev_hits)
         mb = 2*8*this.shape[0]*this.shape[1]/1024/1024
         if resolution_limit:
-            sni,snj = src_lon.shape[0],src_lat.shape[0]
-            dellon_s, dellat_s = (src_lon[-1]-src_lon[0])/(sni-1), (src_lat[-1]-src_lat[0])/(snj-1)
+            dellon_s, dellat_s = eds.spacing()
             del_lam, del_phi = this.coarsest_resolution(mask_idx=mask_res)
             dellon_t, dellat_t = del_lam.max(), del_phi.max()
             converged = converged or ( (dellon_t<=dellon_s) and (dellat_t<=dellat_s) )
@@ -384,7 +363,7 @@ class GMesh:
             if timers: stic = GMesh._toc(tic, "refine by 2")
             # Find nearest neighbor indices into source
             if fixed_refine_level<1:
-                hits = this.source_hits(src_lon, src_lat, singularity_radius=singularity_radius)
+                hits = this.source_hits(eds, singularity_radius=singularity_radius)
                 if timers: stic = GMesh._toc(stic, "calculate hits on topo grid")
                 nhits, prev_hits = hits.sum().astype(int), nhits
                 converged = converged or np.all(hits) or (nhits==prev_hits)
@@ -411,34 +390,21 @@ class GMesh:
 
         return GMesh_list
 
-    def project_source_data_onto_target_mesh(self, xs, ys, zs, use_center=True, timers=False):
-        """Returns the array on target mesh with values equal to the nearest-neighbor source point data"""
-        assert len(xs.shape) == len(ys.shape), "xs,ys must both be either 1D or 2D"
-        # if xs.shape != ys.shape: raise Exception('xs and ys must be the same shape')
+    def project_source_data_onto_target_mesh(self, eds, use_center=True, timers=False):
+        """Returns the EDS data on the target mesh (self) with values equal to the nearest-neighbor source point data"""
         if timers: gtic = GMesh._toc(None, "")
-        nns_i,nns_j = self.find_nn_uniform_source(xs,ys,use_center=use_center)
-        if timers: tic = GMesh._toc(gtic, "Calculate interpolation indexes")
         if use_center:
             self.height = np.zeros((self.nj,self.ni))
+            tx, ty = self.interp_center_coords(work_in_3d=True)
         else:
             self.height = np.zeros((self.nj+1,self.ni+1))
-        if timers: tic = GMesh._toc(tic, "Allocate memory")
-        self.height[:,:] = zs[nns_j[:,:],nns_i[:,:]]
+            tx, ty = self.lon, self.lat
+        if timers: tic = GMesh._toc(gtic, "Allocate memory")
+        nns_i,nns_j = eds.indices( tx, ty )
+        if timers: tic = GMesh._toc(tic, "Calculate interpolation indexes")
+        self.height[:,:] = eds.data[nns_j[:,:],nns_i[:,:]]
         if timers: tic = GMesh._toc(tic, "indirect indexing")
         if timers: tic = GMesh._toc(gtic, "Whole process")
-        return
-
-    def find_source_spanning_slices(self, lon, lat, debug=False):
-        """Finds the slice ranges of the cell data, described by lon and lat cell-center coordinates, that span the mesh."""
-
-        assert is_mesh_uniform(lon,lat), 'Grid (lon,lat) is not uniform, this method will not work properly'
-        assert len(lon.shape) == len(lat.shape), "lon and lat must both be either 1D or 2D"
-        if len(lon.shape)==2:
-            # Convert to 1D arrays
-            lon,lat = lon[0,:],lat[:,0]
-
-        nn_i, nn_j = self.find_nn_uniform_source(lon, lat, use_center=False, debug=debug)
-        return slice( nn_i.min(), nn_i.max()+1 ), slice( nn_j.min(), nn_j.max() )
 
 class RegularCoord:
     """Container for uniformly spaced global cell center coordinate parameters
@@ -470,19 +436,29 @@ class RegularCoord:
         S = RegularCoord( self.n, self.origin, self.periodic ) # This creates a copy of "self"
         S.start, S.stop = Is, Ie
         return S
-    def indices( self, x ):
+    def indices( self, x, bound_subset=False ):
         """Return indices of cells that contain x
 
         If RegularCoord is non-periodic (i.e. latitude), out of range values of "x" will be clipped to -90..90 .
         If regularCoord is periodic, any value of x will be globally wrapped.
         If RegularCoord is a subset, then "x" will be clipped to the bounds of the subset (after periodic wrapping).
+        if "bound_subset" is True, then limit indices to the range of the subset
         """
         ind = np.floor( self.rdelta * np.array(x) - self.rem ).astype(int) - self.offset
+        # Apply global bounds
         if self.periodic:
             ind = np.mod( ind, self.n )
         else:
             ind = np.maximum( 0, np.minimum( self.n - 1, ind ) )
-        ind = np.maximum( self.start, np.minimum( self.stop - 1, ind ) ) - self.start
+        # Now adjust for subset
+        if bound_subset:
+            ind = np.maximum( self.start, np.minimum( self.stop - 1, ind ) ) - self.start
+            assert ind.min() >= 0, "out of range"
+            assert ind.max() < self.stop - self.start, "out of range"
+        else:
+            ind = ind - self.start
+            assert ind.min() >= 0, "out of range"
+            assert ind.max() < self.stop - self.start, "out of range"
         return ind
 
 class UniformEDS:
@@ -496,7 +472,7 @@ class UniformEDS:
         # Store coordinates for posterity
         self.lonh, self.lath = lon, lat
 
-        if elevation is None: # We allow the creation of a "blank" UniformEDS when subsetting
+        if elevation is None: # When creating a subset, we temporarily allow the creation of a "blank" UniformEDS
             self.lon_coord, self.lat_coord = None, None
             self.lonq, self.latq = None, None
             self.data = np.zeros((0))
@@ -507,7 +483,6 @@ class UniformEDS:
             assert np.abs( lon[-1] - lon[0] - 360 + dlon ) < 1.e-5 * dlon, "longitude does not appear to be global"
             assert np.abs( lat[-1] - lat[0] - 180 + dlat ) < 1.e-5 * dlat, "latitude does not appear to be global"
             lon0 = np.floor( lon[0] - 0.5 * dlon + 0.5 ) # Calculating the phase this way restricts ourselves to data starting on integer values
-            print('LON0 =',lon0)
             assert np.abs( lon[0] - 0.5 * dlon - lon0 ) < 1.e-9 * dlon, "edge of longitude is not a round number"
             assert np.abs( lat[0] - 0.5 * dlat + 90 ) < 1.e-9 * dlat, "edge of latitude is not 90"
             self.lon_coord = RegularCoord( self.ni, lon0, True)
@@ -515,25 +490,33 @@ class UniformEDS:
             # Calculate node coordinates for convenient plotting
             self.lonq = lon0 + dlon * ( np.arange( self.ni + 1 ) )
             self.latq = dlat * ( np.arange( self.nj + 1 ) - 0.5 * self.nj )
+            self.dlon, self.dlat = 360. / self.ni, 180 / self.nj
             self.data = elevation
     def __repr__( self ):
-        return '<UniformEDS {} x {}\nlon = {}\n{}\n{}\nlat = {}\n{}\n{}\ndata = {}>'.format( \
-            self.ni, self.nj, self.lon_coord, self.lonh, self.lonq, self.lat_coord, self.lath, self.latq, self.data.shape )
+        mem = ( self.ni * self.nj + self.ni + self.nj ) * 8 / 1024 / 1024 / 1024 # Gb
+        return '<UniformEDS {} x {} ({:.3f}Gb)\nlon = {}\nh:{}\nq:{}\nlat = {}\nh:{}\nq:{}\ndata = {}>'.format( \
+            self.ni, self.nj, mem, self.lon_coord, self.lonh, self.lonq, self.lat_coord, self.lath, self.latq, self.data.shape )
+    def spacing( self ):
+        """Returns the longitude and latitude spacing"""
+        return self.dlon, self.dlat
     def subset( self, islice, jslice ):
         """Subset a UniformEDS as [jslice,islice]"""
         S = UniformEDS( self.lonh[islice], self.lath[jslice] )
-        S.lon_coord = self.lon_coord.subset(islice)
-        S.lat_coord = self.lat_coord.subset(jslice)
+        S.lon_coord = self.lon_coord.subset( islice )
+        S.lat_coord = self.lat_coord.subset( jslice )
         S.lonq = self.lonq[ slice( islice.start, islice.stop + 1 ) ]
         S.latq = self.latq[ slice( jslice.start, jslice.stop + 1 ) ]
+        S.dlon, S.dlat = self.dlon, self.dlat
         S.data = self.data[jslice, islice]
         return S
-    def indices( self, lon, lat ):
+    def indices( self, lon, lat, bound_subset=False ):
         """Return the i,j indices of cells in which (lon,lat) fall"""
-        return self.lon_coord.indices( lon ), self.lat_coord.indices( lat )
+        return self.lon_coord.indices( lon, bound_subset=bound_subset ), self.lat_coord.indices( lat, bound_subset=bound_subset )
     def bb_slices( self, lon, lat ):
         """Returns the slices defining the bounding box of data hit by (lon,lat)"""
         si, sj = self.indices( lon, lat )
         return slice( si.min(), si.max() +1 ), slice( sj.min(), sj.max() + 1 )
-    def plot(self, axis, **kwargs):
-        return axis.pcolormesh( self.lonq, self.latq, self.data )
+    def plot(self, axis, subsample=None, **kwargs):
+        if subsample is None:
+            return axis.pcolormesh( self.lonq, self.latq, self.data, **kwargs )
+        return axis.pcolormesh( self.lonq[::subsample], self.latq[::subsample], self.data[::subsample,::subsample], **kwargs )
